@@ -58,7 +58,7 @@ export default function DashboardPage() {
 
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="grid gap-1">
             <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ด</h1>
@@ -70,47 +70,16 @@ export default function DashboardPage() {
         </Button>
       </div>
       
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">นักเรียนทั้งหมด</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">20</div>
-            <p className="text-xs text-muted-foreground">ที่อยู่ในห้องเรียนตอนนี้</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">สนใจ</CardTitle>
-            <Smile className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">85%</div>
-            <p className="text-xs text-muted-foreground">+5% จากนาทีที่แล้ว</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">ไม่สนใจ</CardTitle>
-            <Meh className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">15%</div>
-            <p className="text-xs text-muted-foreground">-5% จากนาทีที่แล้ว</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 flex-1 min-h-0">
-        <div className="lg:col-span-3">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Video */}
+        <div className="lg:col-span-2">
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>การวิเคราะห์วิดีโอสด</CardTitle>
               <CardDescription>วิเคราะห์การแสดงออกทางสีหน้าแบบเรียลไทม์</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col justify-center items-center gap-4 p-0">
+            <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
               <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
                  <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
                 { hasCameraPermission && (
@@ -134,7 +103,43 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-        <div className="lg:col-span-2">
+
+        {/* Right Column: Summary Cards */}
+        <div className="lg:col-span-1 flex flex-col gap-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">นักเรียนทั้งหมด</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">20</div>
+                <p className="text-xs text-muted-foreground">ที่อยู่ในห้องเรียนตอนนี้</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">สนใจ</CardTitle>
+                <Smile className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">85%</div>
+                <p className="text-xs text-muted-foreground">+5% จากนาทีที่แล้ว</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">ไม่สนใจ</CardTitle>
+                <Meh className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">15%</div>
+                <p className="text-xs text-muted-foreground">-5% จากนาทีที่แล้ว</p>
+              </CardContent>
+            </Card>
+        </div>
+        
+        {/* Bottom Row: History */}
+        <div className="lg:col-span-3">
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>ข้อมูลย้อนหลัง</CardTitle>
