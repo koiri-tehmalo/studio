@@ -149,15 +149,9 @@ export default function DashboardPage() {
         const blendshapes = results.faceBlendshapes[i]?.categories;
         if (!blendshapes) continue;
 
-        const smileScore = Math.max(
-          blendshapes.find(c => c.categoryName === 'mouthSmileLeft')?.score ?? 0,
-          blendshapes.find(c => c.categoryName === 'mouthSmileRight')?.score ?? 0,
-        );
-        const neutralScore = blendshapes.find(c => c.categoryName === '_neutral')?.score ?? 0;
-
-        const isInterested = smileScore > 0.4 || neutralScore > 0.6;
-        const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
-        const color = isInterested ? '#4ade80' : '#f87171';
+        // ตามคำขอของผู้ใช้ ใบหน้าที่ตรวจจับได้จะถือว่า "สนใจ" เสมอ
+        const thaiText = 'สนใจ';
+        const color = '#4ade80';
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
