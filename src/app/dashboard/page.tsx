@@ -108,6 +108,39 @@ export default function DashboardPage() {
     setHourlyData(hourlyD);
   }, []);
 
+  const handleExport = () => {
+    const headers = ["หมวดหมู่", "เวลา", "สนใจ", "ไม่สนใจ"];
+    let csvRows = [headers.join(",")];
+
+    const addDataToCsv = (data: any[], category: string) => {
+        data.forEach(entry => {
+            const row = [
+                category,
+                entry.timestamp,
+                entry.interested,
+                entry.uninterested
+            ].join(",");
+            csvRows.push(row);
+        });
+    };
+
+    addDataToCsv(perMinuteData, "10 นาทีล่าสุด");
+    addDataToCsv(per10MinuteData, "ราย 10 นาที");
+    addDataToCsv(hourlyData, "รายชั่วโมง");
+
+    // Prepending BOM for UTF-8 compatibility in Excel
+    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "ข้อมูลการมีส่วนร่วม.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const predictWebcam = () => {
     if (!videoRef.current || !canvasRef.current || !faceLandmarker || videoRef.current.paused || videoRef.current.readyState < 2) {
       if(videoRef.current && !videoRef.current.paused) {
@@ -192,7 +225,7 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ด</h1>
             <p className="text-muted-foreground">การวิเคราะห์การมีส่วนร่วมในห้องเรียนแบบเรียลไทม์</p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={handleExport}>
           <FileDown className="mr-2 h-4 w-4" />
           ส่งออกเป็น Excel
         </Button>
@@ -323,5 +356,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
