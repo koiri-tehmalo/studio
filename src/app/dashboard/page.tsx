@@ -24,7 +24,9 @@ const BoundingBox = ({ x, y, width, height, isInterested }: { x: string, y: stri
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
+  const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
+  const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
+  const [hourlyData, setHourlyData] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -52,44 +54,43 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    const generateHistoricalData = () => {
-        const now = new Date();
-        const data = [];
+    const now = new Date();
+    
+    // 1. Per-minute for the first 10 minutes (0-9 mins ago)
+    const minuteData = [];
+    for (let i = 0; i < 10; i++) {
+        const timestamp = subMinutes(now, i);
+        minuteData.push({
+            timestamp: format(timestamp, 'HH:mm น.'),
+            interested: `${Math.floor(Math.random() * 10) + 85}%`,
+            uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
+        });
+    }
+    setPerMinuteData(minuteData);
 
-        // 1. Per-minute for the first 10 minutes (0-9 mins ago)
-        for (let i = 0; i < 10; i++) {
-            const timestamp = subMinutes(now, i);
-            data.push({
-                timestamp: format(timestamp, 'HH:mm น.'),
-                interested: `${Math.floor(Math.random() * 10) + 85}%`,
-                uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
-            });
-        }
+    // 2. Per-10-minutes for the next 6 entries (10, 20, 30, 40, 50, 60 mins ago)
+    const tenMinuteData = [];
+    for (let i = 1; i <= 6; i++) {
+        const timestamp = subMinutes(now, i * 10);
+        tenMinuteData.push({
+            timestamp: format(timestamp, 'HH:mm น.'),
+            interested: `${Math.floor(Math.random() * 20) + 70}%`,
+            uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
+        });
+    }
+    setPer10MinuteData(tenMinuteData);
 
-        // 2. Per-10-minutes for the next 6 entries (10, 20, 30, 40, 50, 60 mins ago)
-        for (let i = 1; i <= 6; i++) {
-            const timestamp = subMinutes(now, i * 10);
-            data.push({
-                timestamp: format(timestamp, 'HH:mm น.'),
-                interested: `${Math.floor(Math.random() * 20) + 70}%`,
-                uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
-            });
-        }
-
-        // 3. Hourly for a few hours before that. (2, 3, 4, 5 hours ago)
-        for (let i = 2; i <= 5; i++) {
-            const timestamp = subHours(now, i);
-            data.push({
-                timestamp: format(timestamp, 'HH:mm น.'),
-                interested: `${Math.floor(Math.random() * 25) + 60}%`,
-                uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
-            });
-        }
-
-        return data;
-    };
-
-    setHistoricalData(generateHistoricalData());
+    // 3. Hourly for a few hours before that. (2, 3, 4, 5 hours ago)
+    const hourlyD = [];
+    for (let i = 2; i <= 5; i++) {
+        const timestamp = subHours(now, i);
+        hourlyD.push({
+            timestamp: format(timestamp, 'HH:mm น.'),
+            interested: `${Math.floor(Math.random() * 25) + 60}%`,
+            uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
+        });
+    }
+    setHourlyData(hourlyD);
   }, []);
 
 
@@ -191,8 +192,37 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historicalData.map((entry, index) => (
-                    <TableRow key={index}>
+                  <TableRow>
+                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                          10 นาทีล่าสุด
+                      </TableCell>
+                  </TableRow>
+                  {perMinuteData.map((entry, index) => (
+                    <TableRow key={`minute-${index}`}>
+                      <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                      <TableCell className="text-center">{entry.interested}</TableCell>
+                      <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                          ราย 10 นาที
+                      </TableCell>
+                  </TableRow>
+                  {per10MinuteData.map((entry, index) => (
+                    <TableRow key={`10min-${index}`}>
+                      <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                      <TableCell className="text-center">{entry.interested}</TableCell>
+                      <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow>
+                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                          รายชั่วโมง
+                      </TableCell>
+                  </TableRow>
+                  {hourlyData.map((entry, index) => (
+                    <TableRow key={`hour-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
                       <TableCell className="text-center">{entry.interested}</TableCell>
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
