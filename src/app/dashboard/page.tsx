@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
-import { format, subMinutes, subHours } from 'date-fns';
+import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 export default function DashboardPage() {
@@ -25,6 +25,9 @@ export default function DashboardPage() {
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
+
+  const realtimeStudentCountRef = useRef(0);
+  const interestedCountRef = useRef(0);
   
   useEffect(() => {
     const createFaceLandmarker = async () => {
@@ -86,32 +89,43 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    const now = new Date();
-    
-    const minuteData = Array.from({ length: 10 }, (_, i) => ({
-      timestamp: format(subMinutes(now, i), 'HH:mm น.'),
-      personCount: Math.floor(Math.random() * 6) + 15,
-      interested: `${Math.floor(Math.random() * 10) + 85}%`,
-      uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
-    }));
-    setPerMinuteData(minuteData);
+    const dataCaptureInterval = setInterval(() => {
+      const now = new Date();
+      const personCount = realtimeStudentCountRef.current;
+      const interested = interestedCountRef.current;
+      const uninterested = personCount - interested;
 
-    const tenMinuteData = Array.from({ length: 6 }, (_, i) => ({
-      timestamp: format(subMinutes(now, (i + 1) * 10), 'HH:mm น.'),
-      personCount: Math.floor(Math.random() * 6) + 15,
-      interested: `${Math.floor(Math.random() * 20) + 70}%`,
-      uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
-    }));
-    setPer10MinuteData(tenMinuteData);
+      const interestedPercent = personCount > 0 ? `${Math.round((interested / personCount) * 100)}%` : '0%';
+      const uninterestedPercent = personCount > 0 ? `${Math.round((uninterested / personCount) * 100)}%` : '0%';
 
-    const hourlyD = Array.from({ length: 4 }, (_, i) => ({
-      timestamp: format(subHours(now, i + 2), 'HH:mm น.'),
-      personCount: Math.floor(Math.random() * 6) + 15,
-      interested: `${Math.floor(Math.random() * 25) + 60}%`,
-      uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
-    }));
-    setHourlyData(hourlyD);
-  }, []);
+      const newEntry = {
+        timestamp: format(now, 'HH:mm น.'),
+        personCount,
+        interested: interestedPercent,
+        uninterested: uninterestedPercent,
+      };
+
+      // Update per-minute data every minute
+      setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 9)]);
+
+      // Update 10-minute data every 10 minutes
+      if (now.getMinutes() % 10 === 0) {
+        const new10MinEntry = { ...newEntry, timestamp: format(now, 'HH:mm น.') };
+        setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
+      }
+      
+      // Update hourly data every hour
+      if (now.getMinutes() === 0) {
+        const newHourlyEntry = { ...newEntry, timestamp: format(now, 'HH:00 น.') };
+        setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
+      }
+
+    }, 60000); // 60 seconds
+
+    return () => {
+      clearInterval(dataCaptureInterval);
+    };
+  }, []); // Run only once on mount
 
   const handleExport = () => {
     const headers = ["หมวดหมู่", "เวลา", "จำนวนคน", "สนใจ", "ไม่สนใจ"];
@@ -219,6 +233,8 @@ export default function DashboardPage() {
       }
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
+      realtimeStudentCountRef.current = results.faceLandmarks.length;
+      interestedCountRef.current = currentInterested;
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
@@ -330,11 +346,13 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {perMinuteData.length > 0 && (
                   <TableRow>
                       <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           10 นาทีล่าสุด
                       </TableCell>
                   </TableRow>
+                  )}
                   {perMinuteData.map((entry, index) => (
                     <TableRow key={`minute-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
@@ -343,11 +361,13 @@ export default function DashboardPage() {
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
                   ))}
+                  {per10MinuteData.length > 0 && (
                   <TableRow>
                       <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           ราย 10 นาที
                       </TableCell>
                   </TableRow>
+                  )}
                   {per10MinuteData.map((entry, index) => (
                     <TableRow key={`10min-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
@@ -356,11 +376,13 @@ export default function DashboardPage() {
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
                   ))}
+                  {hourlyData.length > 0 && (
                   <TableRow>
                       <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           รายชั่วโมง
                       </TableCell>
                   </TableRow>
+                  )}
                   {hourlyData.map((entry, index) => (
                     <TableRow key={`hour-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
