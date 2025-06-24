@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AtSign, Lock, Cpu } from 'lucide-react';
+import { Cpu } from 'lucide-react';
 
 export default function LoginPage() {
   return (
@@ -16,26 +16,24 @@ export default function LoginPage() {
              <Cpu size={48} className="text-primary" />
           </div>
           <CardTitle className="text-3xl font-headline">ผู้สังเกตการณ์ห้องเรียน</CardTitle>
-          <CardDescription>กรุณาลงชื่อเข้าใช้เพื่อเข้าสู่แดชบอร์ด</CardDescription>
+          <CardDescription>กรุณากรอกข้อมูลเพื่อเริ่มการสังเกตการณ์</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="email">อีเมล</Label>
-            <div className="relative">
-              <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="email" type="email" placeholder="name@example.com" required className="pl-10" />
-            </div>
+            <Label htmlFor="name">ชื่อ</Label>
+            <Input id="name" type="text" placeholder="ชื่อ-นามสกุล" required />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">รหัสผ่าน</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <Input id="password" type="password" required className="pl-10" />
-            </div>
+            <Label htmlFor="subject">วิชา</Label>
+            <Input id="subject" type="text" placeholder="ชื่อวิชาที่สอน" required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="date">วันที่</Label>
+            <Input id="date" type="date" required />
           </div>
            <Link href="/dashboard" passHref>
               <Button type="submit" className="w-full font-bold text-lg" size="lg">
-                เข้าสู่ระบบ
+                เริ่มการสังเกตการณ์
               </Button>
             </Link>
         </CardContent>
