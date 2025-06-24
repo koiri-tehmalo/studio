@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -23,6 +22,9 @@ export default function DashboardPage() {
   const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
   const { toast } = useToast();
+
+  const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
+  const [interestedCount, setInterestedCount] = useState(0);
   
   useEffect(() => {
     const createFaceLandmarker = async () => {
@@ -37,7 +39,7 @@ export default function DashboardPage() {
           },
           outputFaceBlendshapes: true,
           runningMode: "VIDEO",
-          numFaces: 5,
+          numFaces: 20, // Increased to detect more faces
         });
         setFaceLandmarker(landmarker);
         setModelsLoaded(true);
@@ -132,7 +134,6 @@ export default function DashboardPage() {
     addDataToCsv(per10MinuteData, "ราย 10 นาที");
     addDataToCsv(hourlyData, "รายชั่วโมง");
 
-    // Prepending BOM for UTF-8 compatibility in Excel
     const csvContent = "\uFEFF" + csvRows.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -164,6 +165,8 @@ export default function DashboardPage() {
       canvas.height = video.clientHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
+      let currentInterested = 0;
+
       for (let i = 0; i < results.faceLandmarks.length; i++) {
         const landmarks = results.faceLandmarks[i];
         
@@ -193,6 +196,10 @@ export default function DashboardPage() {
         const neutralScore = blendshapes.find(c => c.categoryName === '_neutral')?.score ?? 0;
 
         const isInterested = smileScore > 0.4 || neutralScore > 0.8;
+        if (isInterested) {
+          currentInterested++;
+        }
+        
         const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
         const color = isInterested ? '#4ade80' : '#f87171';
 
@@ -210,6 +217,8 @@ export default function DashboardPage() {
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, box.x + 5, box.y - 6);
       }
+      setRealtimeStudentCount(results.faceLandmarks.length);
+      setInterestedCount(currentInterested);
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
@@ -221,6 +230,11 @@ export default function DashboardPage() {
     }
     predictWebcam();
   };
+
+  const uninterestedCount = realtimeStudentCount - interestedCount;
+  const interestedPercentage = realtimeStudentCount > 0 ? Math.round((interestedCount / realtimeStudentCount) * 100) : 0;
+  const uninterestedPercentage = realtimeStudentCount > 0 ? Math.round((uninterestedCount / realtimeStudentCount) * 100) : 0;
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -273,8 +287,8 @@ export default function DashboardPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">20</div>
-                <p className="text-xs text-muted-foreground">ที่อยู่ในห้องเรียนตอนนี้</p>
+                <div className="text-2xl font-bold">{realtimeStudentCount}</div>
+                <p className="text-xs text-muted-foreground">ที่ตรวจพบในกล้องขณะนี้</p>
               </CardContent>
             </Card>
             <Card>
@@ -283,8 +297,8 @@ export default function DashboardPage() {
                 <Smile className="h-4 w-4 text-green-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">85%</div>
-                <p className="text-xs text-muted-foreground">+5% จากนาทีที่แล้ว</p>
+                <div className="text-2xl font-bold">{interestedPercentage}%</div>
+                <p className="text-xs text-muted-foreground">{interestedCount} จาก {realtimeStudentCount} คน</p>
               </CardContent>
             </Card>
             <Card>
@@ -293,8 +307,8 @@ export default function DashboardPage() {
                 <Meh className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">15%</div>
-                <p className="text-xs text-muted-foreground">-5% จากนาทีที่แล้ว</p>
+                <div className="text-2xl font-bold">{uninterestedPercentage}%</div>
+                <p className="text-xs text-muted-foreground">{uninterestedCount} จาก {realtimeStudentCount} คน</p>
               </CardContent>
             </Card>
         </div>
@@ -364,5 +378,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
