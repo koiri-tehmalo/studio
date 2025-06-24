@@ -8,13 +8,14 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format, subMinutes, subHours } from 'date-fns';
-import * as faceapi from '@vladmandic/face-api';
+import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const intervalRef = useRef<NodeJS.Timeout>();
-
+  const animationFrameId = useRef<number>();
+  
+  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | undefined>(undefined);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
@@ -23,17 +24,24 @@ export default function DashboardPage() {
   const { toast } = useToast();
   
   useEffect(() => {
-    const loadModels = async () => {
-      const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+    const createFaceLandmarker = async () => {
       try {
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
-        ]);
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
+        );
+        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+            delegate: "GPU",
+          },
+          outputFaceBlendshapes: true,
+          runningMode: "VIDEO",
+          numFaces: 5,
+        });
+        setFaceLandmarker(landmarker);
         setModelsLoaded(true);
       } catch (error) {
-        console.error("Failed to load models:", error);
+        console.error("Failed to load MediaPipe models:", error);
         toast({
           variant: 'destructive',
           title: 'ไม่สามารถโหลดโมเดล AI',
@@ -41,11 +49,12 @@ export default function DashboardPage() {
         });
       }
     };
-    loadModels();
+    createFaceLandmarker();
     
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      faceLandmarker?.close();
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
       }
     };
   }, [toast]);
@@ -59,8 +68,7 @@ export default function DashboardPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-      } catch (error)
-        {
+      } catch (error) {
         console.error('Error accessing camera:', error);
         setHasCameraPermission(false);
         toast({
@@ -99,52 +107,82 @@ export default function DashboardPage() {
     setHourlyData(hourlyD);
   }, []);
 
-  const handleVideoPlay = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+  const predictWebcam = () => {
+    if (!videoRef.current || !canvasRef.current || !faceLandmarker || videoRef.current.paused || videoRef.current.readyState < 2) {
+      if(videoRef.current && !videoRef.current.paused) {
+        animationFrameId.current = requestAnimationFrame(predictWebcam);
+      }
+      return;
     }
     
-    intervalRef.current = setInterval(async () => {
-      if (videoRef.current && canvasRef.current && modelsLoaded && !videoRef.current.paused) {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    
+    const results = faceLandmarker.detectForVideo(video, performance.now());
+
+    const ctx = canvas.getContext('2d');
+    if (ctx && results.faceLandmarks) {
+      canvas.width = video.clientWidth;
+      canvas.height = video.clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      for (let i = 0; i < results.faceLandmarks.length; i++) {
+        const landmarks = results.faceLandmarks[i];
         
-        const displaySize = { width: video.clientWidth, height: video.clientHeight };
-        faceapi.matchDimensions(canvas, displaySize);
-        
-        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
-          .withFaceExpressions();
-        
-        const resizedDetections = faceapi.resizeResults(detections, displaySize);
-        
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          
-          resizedDetections.forEach(detection => {
-            const box = detection.detection.box;
-            const expressions = detection.expressions;
-            
-            const isInterested = expressions.happy > 0.5 || expressions.neutral > 0.6;
-            const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
-            const color = isInterested ? '#4ade80' : '#f87171';
-            
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 3;
-            ctx.strokeRect(box.x, box.y, box.width, box.height);
-            
-            ctx.fillStyle = color;
-            const textBackgroundHeight = 24;
-            ctx.font = `bold 16px 'Poppins'`;
-            const textWidth = ctx.measureText(thaiText).width;
-            ctx.fillRect(box.x - 1, box.y - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
-            
-            ctx.fillStyle = '#fff';
-            ctx.fillText(thaiText, box.x + 5, box.y - 6);
-          });
+        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+        for (const landmark of landmarks) {
+            const x = landmark.x * canvas.width;
+            const y = landmark.y * canvas.height;
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
         }
+        const padding = 10;
+        const box = {
+            x: minX - padding,
+            y: minY - padding,
+            width: (maxX - minX) + (padding * 2),
+            height: (maxY - minY) + (padding * 2)
+        };
+        
+        const blendshapes = results.faceBlendshapes[i]?.categories;
+        if (!blendshapes) continue;
+
+        const smileScore = Math.max(
+          blendshapes.find(c => c.categoryName === 'mouthSmileLeft')?.score ?? 0,
+          blendshapes.find(c => c.categoryName === 'mouthSmileRight')?.score ?? 0,
+        );
+        const neutralScore = blendshapes.find(c => c.categoryName === '_neutral')?.score ?? 0;
+
+        const isInterested = smileScore > 0.4 || neutralScore > 0.6;
+        const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
+        const color = isInterested ? '#4ade80' : '#f87171';
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(box.x, box.y, box.width, box.height);
+        
+        ctx.fillStyle = color;
+        const textBackgroundHeight = 24;
+        ctx.font = `bold 16px 'Poppins'`;
+        const textWidth = ctx.measureText(thaiText).width;
+        
+        ctx.fillRect(box.x - 1, box.y - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
+        
+        ctx.fillStyle = '#fff';
+        ctx.fillText(thaiText, box.x + 5, box.y - 6);
       }
-    }, 200);
+    }
+    
+    animationFrameId.current = requestAnimationFrame(predictWebcam);
+  };
+
+  const handleVideoPlay = () => {
+    if (animationFrameId.current) {
+      cancelAnimationFrame(animationFrameId.current);
+    }
+    predictWebcam();
   };
 
   return (
