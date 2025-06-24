@@ -88,6 +88,7 @@ export default function DashboardPage() {
     
     const minuteData = Array.from({ length: 10 }, (_, i) => ({
       timestamp: format(subMinutes(now, i), 'HH:mm น.'),
+      personCount: Math.floor(Math.random() * 6) + 15,
       interested: `${Math.floor(Math.random() * 10) + 85}%`,
       uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
     }));
@@ -95,6 +96,7 @@ export default function DashboardPage() {
 
     const tenMinuteData = Array.from({ length: 6 }, (_, i) => ({
       timestamp: format(subMinutes(now, (i + 1) * 10), 'HH:mm น.'),
+      personCount: Math.floor(Math.random() * 6) + 15,
       interested: `${Math.floor(Math.random() * 20) + 70}%`,
       uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
     }));
@@ -102,6 +104,7 @@ export default function DashboardPage() {
 
     const hourlyD = Array.from({ length: 4 }, (_, i) => ({
       timestamp: format(subHours(now, i + 2), 'HH:mm น.'),
+      personCount: Math.floor(Math.random() * 6) + 15,
       interested: `${Math.floor(Math.random() * 25) + 60}%`,
       uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
     }));
@@ -109,7 +112,7 @@ export default function DashboardPage() {
   }, []);
 
   const handleExport = () => {
-    const headers = ["หมวดหมู่", "เวลา", "สนใจ", "ไม่สนใจ"];
+    const headers = ["หมวดหมู่", "เวลา", "จำนวนคน", "สนใจ", "ไม่สนใจ"];
     let csvRows = [headers.join(",")];
 
     const addDataToCsv = (data: any[], category: string) => {
@@ -117,6 +120,7 @@ export default function DashboardPage() {
             const row = [
                 category,
                 entry.timestamp,
+                entry.personCount,
                 entry.interested,
                 entry.uninterested
             ].join(",");
@@ -306,43 +310,47 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="pl-6">เวลา</TableHead>
+                    <TableHead className="text-center">จำนวนคน</TableHead>
                     <TableHead className="text-center text-green-600">สนใจ</TableHead>
                     <TableHead className="text-center text-red-600 pr-6">ไม่สนใจ</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           10 นาทีล่าสุด
                       </TableCell>
                   </TableRow>
                   {perMinuteData.map((entry, index) => (
                     <TableRow key={`minute-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                      <TableCell className="text-center">{entry.personCount}</TableCell>
                       <TableCell className="text-center">{entry.interested}</TableCell>
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow>
-                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           ราย 10 นาที
                       </TableCell>
                   </TableRow>
                   {per10MinuteData.map((entry, index) => (
                     <TableRow key={`10min-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                      <TableCell className="text-center">{entry.personCount}</TableCell>
                       <TableCell className="text-center">{entry.interested}</TableCell>
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow>
-                      <TableCell colSpan={3} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
+                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
                           รายชั่วโมง
                       </TableCell>
                   </TableRow>
                   {hourlyData.map((entry, index) => (
                     <TableRow key={`hour-${index}`}>
                       <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                      <TableCell className="text-center">{entry.personCount}</TableCell>
                       <TableCell className="text-center">{entry.interested}</TableCell>
                       <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
@@ -356,3 +364,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
