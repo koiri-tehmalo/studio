@@ -26,8 +26,10 @@ export default function DashboardPage() {
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
 
-  const realtimeStudentCountRef = useRef(0);
-  const interestedCountRef = useRef(0);
+  // Refs for accumulating data for 1-minute averages
+  const minuteFrameCountRef = useRef(0);
+  const minuteTotalStudentCountRef = useRef(0);
+  const minuteTotalInterestedCountRef = useRef(0);
   
   useEffect(() => {
     const createFaceLandmarker = async () => {
@@ -91,35 +93,46 @@ export default function DashboardPage() {
   useEffect(() => {
     const dataCaptureInterval = setInterval(() => {
       const now = new Date();
-      const personCount = realtimeStudentCountRef.current;
-      const interested = interestedCountRef.current;
-      const uninterested = personCount - interested;
-
-      const interestedPercent = personCount > 0 ? `${Math.round((interested / personCount) * 100)}%` : '0%';
-      const uninterestedPercent = personCount > 0 ? `${Math.round((uninterested / personCount) * 100)}%` : '0%';
-
-      const newEntry = {
-        timestamp: format(now, 'HH:mm น.'),
-        personCount,
-        interested: interestedPercent,
-        uninterested: uninterestedPercent,
-      };
-
-      // Update per-minute data every minute
-      setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 9)]);
-
-      // Update 10-minute data every 10 minutes
-      if (now.getMinutes() % 10 === 0) {
-        const new10MinEntry = { ...newEntry, timestamp: format(now, 'HH:mm น.') };
-        setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
-      }
       
-      // Update hourly data every hour
-      if (now.getMinutes() === 0) {
-        const newHourlyEntry = { ...newEntry, timestamp: format(now, 'HH:00 น.') };
-        setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
-      }
+      const frameCount = minuteFrameCountRef.current;
+      const totalStudents = minuteTotalStudentCountRef.current;
+      const totalInterested = minuteTotalInterestedCountRef.current;
 
+      // Reset accumulators for the next minute immediately to avoid missing frames.
+      minuteFrameCountRef.current = 0;
+      minuteTotalStudentCountRef.current = 0;
+      minuteTotalInterestedCountRef.current = 0;
+
+      if (frameCount > 0) {
+        const avgPersonCount = Math.round(totalStudents / frameCount);
+        const avgInterested = Math.round(totalInterested / frameCount);
+        const avgUninterested = avgPersonCount - avgInterested;
+
+        const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
+        const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
+
+        const newEntry = {
+          timestamp: format(now, 'HH:mm น.'),
+          personCount: avgPersonCount,
+          interested: interestedPercent,
+          uninterested: uninterestedPercent,
+        };
+
+        // Update per-minute data every minute
+        setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 9)]);
+
+        // Update 10-minute data every 10 minutes
+        if (now.getMinutes() % 10 === 0) {
+          const new10MinEntry = { ...newEntry, timestamp: format(now, 'HH:mm น.') };
+          setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
+        }
+        
+        // Update hourly data every hour
+        if (now.getMinutes() === 0) {
+          const newHourlyEntry = { ...newEntry, timestamp: format(now, 'HH:00 น.') };
+          setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
+        }
+      }
     }, 60000); // 60 seconds
 
     return () => {
@@ -233,8 +246,11 @@ export default function DashboardPage() {
       }
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
-      realtimeStudentCountRef.current = results.faceLandmarks.length;
-      interestedCountRef.current = currentInterested;
+      
+      // Accumulate data for 1-minute average
+      minuteFrameCountRef.current++;
+      minuteTotalStudentCountRef.current += results.faceLandmarks.length;
+      minuteTotalInterestedCountRef.current += currentInterested;
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
@@ -340,7 +356,7 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="pl-6">เวลา</TableHead>
-                    <TableHead className="text-center">จำนวนคน</TableHead>
+                    <TableHead className="text-center">จำนวนคน (เฉลี่ย)</TableHead>
                     <TableHead className="text-center text-green-600">สนใจ</TableHead>
                     <TableHead className="text-center text-red-600 pr-6">ไม่สนใจ</TableHead>
                   </TableRow>
@@ -400,3 +416,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
