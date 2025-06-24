@@ -13,7 +13,7 @@ import {
   SidebarMenuButton,
   SidebarInset,
 } from '@/components/ui/sidebar';
-import { Cpu, LayoutDashboard, UserCircle } from 'lucide-react';
+import { Cpu, LayoutDashboard } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ export default function DashboardLayout({
           <Link href="/dashboard" className="flex items-center gap-2">
             <Cpu className="w-8 h-8 text-sidebar-primary" />
             <span className="font-headline text-xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-              Observer
+              ผู้สังเกตการณ์
             </span>
           </Link>
         </SidebarHeader>
@@ -42,11 +42,11 @@ export default function DashboardLayout({
               <SidebarMenuButton
                 asChild
                 isActive={pathname === '/dashboard'}
-                tooltip={{ children: 'Dashboard' }}
+                tooltip={{ children: 'แดชบอร์ด' }}
               >
                 <Link href="/dashboard">
                   <LayoutDashboard />
-                  <span>Dashboard</span>
+                  <span>แดชบอร์ด</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -68,24 +68,24 @@ export default function DashboardLayout({
                 >
                   <Avatar>
                     <AvatarImage src="https://placehold.co/40x40.png" alt="User" />
-                    <AvatarFallback>U</AvatarFallback>
+                    <AvatarFallback>ผ</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuLabel>บัญชีของฉัน</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Settings</DropdownMenuItem>
-                <DropdownMenuItem>Support</DropdownMenuItem>
+                <DropdownMenuItem>การตั้งค่า</DropdownMenuItem>
+                <DropdownMenuItem>สนับสนุน</DropdownMenuItem>
                 <DropdownMenuSeparator />
                  <Link href="/" passHref>
-                  <DropdownMenuItem>Logout</DropdownMenuItem>
+                  <DropdownMenuItem>ออกจากระบบ</DropdownMenuItem>
                 </Link>
               </DropdownMenuContent>
             </DropdownMenu>
            </div>
         </header>
-        <main className="flex-1 overflow-auto p-4 sm:px-6 sm:py-0">
+        <main className="flex-1 overflow-hidden p-4 sm:px-6 sm:py-0">
           {children}
         </main>
       </SidebarInset>
