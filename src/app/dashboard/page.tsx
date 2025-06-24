@@ -155,7 +155,7 @@ export default function DashboardPage() {
 
         const neutralScore = blendshapes.find(c => c.categoryName === '_neutral')?.score ?? 0;
 
-        const isInterested = smileScore > 0.4 || neutralScore > 0.2;
+        const isInterested = smileScore > 0.4 || neutralScore > 0.8;
         const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
         const color = isInterested ? '#4ade80' : '#f87171';
 
