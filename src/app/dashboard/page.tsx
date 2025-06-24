@@ -7,14 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users } from 'lucide-react';
-
-const historicalData = [
-  { timestamp: '10:15 AM', interested: '85%', uninterested: '15%', total: 20 },
-  { timestamp: '10:14 AM', interested: '80%', uninterested: '20%', total: 20 },
-  { timestamp: '10:13 AM', interested: '90%', uninterested: '10%', total: 20 },
-  { timestamp: '10:12 AM', interested: '75%', uninterested: '25%', total: 20 },
-  { timestamp: '10:11 AM', interested: '88%', uninterested: '12%', total: 20 },
-];
+import { format, subMinutes, subHours } from 'date-fns';
 
 const BoundingBox = ({ x, y, width, height, isInterested }: { x: string, y: string, width: string, height: string, isInterested: boolean }) => {
   const borderColor = isInterested ? 'border-green-500' : 'border-red-500';
@@ -31,6 +24,7 @@ const BoundingBox = ({ x, y, width, height, isInterested }: { x: string, y: stri
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [historicalData, setHistoricalData] = useState<any[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -42,7 +36,8 @@ export default function DashboardPage() {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
-      } catch (error) {
+      } catch (error)
+        {
         console.error('Error accessing camera:', error);
         setHasCameraPermission(false);
         toast({
@@ -55,6 +50,47 @@ export default function DashboardPage() {
 
     getCameraPermission();
   }, [toast]);
+
+  useEffect(() => {
+    const generateHistoricalData = () => {
+        const now = new Date();
+        const data = [];
+
+        // 1. Per-minute for the first 10 minutes (0-9 mins ago)
+        for (let i = 0; i < 10; i++) {
+            const timestamp = subMinutes(now, i);
+            data.push({
+                timestamp: format(timestamp, 'HH:mm น.'),
+                interested: `${Math.floor(Math.random() * 10) + 85}%`,
+                uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
+            });
+        }
+
+        // 2. Per-10-minutes for the next 6 entries (10, 20, 30, 40, 50, 60 mins ago)
+        for (let i = 1; i <= 6; i++) {
+            const timestamp = subMinutes(now, i * 10);
+            data.push({
+                timestamp: format(timestamp, 'HH:mm น.'),
+                interested: `${Math.floor(Math.random() * 20) + 70}%`,
+                uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
+            });
+        }
+
+        // 3. Hourly for a few hours before that. (2, 3, 4, 5 hours ago)
+        for (let i = 2; i <= 5; i++) {
+            const timestamp = subHours(now, i);
+            data.push({
+                timestamp: format(timestamp, 'HH:mm น.'),
+                interested: `${Math.floor(Math.random() * 25) + 60}%`,
+                uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
+            });
+        }
+
+        return data;
+    };
+
+    setHistoricalData(generateHistoricalData());
+  }, []);
 
 
   return (
@@ -143,7 +179,7 @@ export default function DashboardPage() {
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>ข้อมูลย้อนหลัง</CardTitle>
-              <CardDescription>ภาพรวมการมีส่วนร่วม 5 นาทีล่าสุด</CardDescription>
+              <CardDescription>ภาพรวมการมีส่วนร่วมตามช่วงเวลา</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0">
               <Table>
