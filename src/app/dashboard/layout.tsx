@@ -23,9 +23,9 @@ export default function DashboardLayout({
                 ผู้สังเกตการณ์
               </span>
           </Link>
-          <ThemeToggle />
         </div>
-        <div>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
