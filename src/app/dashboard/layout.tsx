@@ -6,6 +6,7 @@ import { Cpu } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export default function DashboardLayout({
   children,
@@ -15,12 +16,15 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-col h-screen bg-background">
       <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-            <Cpu className="w-8 h-8 text-primary" />
-            <span className="font-headline text-xl font-semibold text-foreground">
-              ผู้สังเกตการณ์
-            </span>
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard" className="flex items-center gap-2">
+              <Cpu className="w-8 h-8 text-primary" />
+              <span className="font-headline text-xl font-semibold text-foreground">
+                ผู้สังเกตการณ์
+              </span>
+          </Link>
+          <ThemeToggle />
+        </div>
         <div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
