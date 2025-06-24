@@ -32,7 +32,7 @@ export default function LoginPage() {
             <Input id="date" type="date" required />
           </div>
            <Link href="/dashboard" passHref>
-              <Button type="submit" className="w-full font-bold text-lg" size="lg">
+              <Button type="submit" className="w-full font-bold text-lg mt-2" size="lg">
                 เริ่มการสังเกตการณ์
               </Button>
             </Link>
