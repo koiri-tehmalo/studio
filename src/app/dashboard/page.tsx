@@ -6,28 +6,49 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileDown, Smile, Meh, Users } from 'lucide-react';
+import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format, subMinutes, subHours } from 'date-fns';
-
-const BoundingBox = ({ x, y, width, height, isInterested }: { x: string, y: string, width: string, height: string, isInterested: boolean }) => {
-  const borderColor = isInterested ? 'border-green-500' : 'border-red-500';
-  const shadowColor = isInterested ? 'shadow-[0_0_15px_rgba(74,222,128,0.8)]' : 'shadow-[0_0_15px_rgba(239,68,68,0.8)]';
-  return (
-    <div
-      className={`absolute ${borderColor} ${shadowColor} border-2 rounded-md transition-all duration-300`}
-      style={{ top: y, left: x, width: width, height: height }}
-    ></div>
-  );
-};
-
+import * as faceapi from '@vladmandic/face-api';
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const intervalRef = useRef<NodeJS.Timeout>();
+
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
+  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
   const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
   const [hourlyData, setHourlyData] = useState<any[]>([]);
   const { toast } = useToast();
+  
+  useEffect(() => {
+    const loadModels = async () => {
+      const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models';
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+        ]);
+        setModelsLoaded(true);
+      } catch (error) {
+        console.error("Failed to load models:", error);
+        toast({
+          variant: 'destructive',
+          title: 'ไม่สามารถโหลดโมเดล AI',
+          description: 'โปรดรีเฟรชหน้าหรือลองอีกครั้งในภายหลัง',
+        });
+      }
+    };
+    loadModels();
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [toast]);
 
   useEffect(() => {
     const getCameraPermission = async () => {
@@ -56,43 +77,75 @@ export default function DashboardPage() {
   useEffect(() => {
     const now = new Date();
     
-    // 1. Per-minute for the first 10 minutes (0-9 mins ago)
-    const minuteData = [];
-    for (let i = 0; i < 10; i++) {
-        const timestamp = subMinutes(now, i);
-        minuteData.push({
-            timestamp: format(timestamp, 'HH:mm น.'),
-            interested: `${Math.floor(Math.random() * 10) + 85}%`,
-            uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
-        });
-    }
+    const minuteData = Array.from({ length: 10 }, (_, i) => ({
+      timestamp: format(subMinutes(now, i), 'HH:mm น.'),
+      interested: `${Math.floor(Math.random() * 10) + 85}%`,
+      uninterested: `${Math.floor(Math.random() * 10) + 5}%`,
+    }));
     setPerMinuteData(minuteData);
 
-    // 2. Per-10-minutes for the next 6 entries (10, 20, 30, 40, 50, 60 mins ago)
-    const tenMinuteData = [];
-    for (let i = 1; i <= 6; i++) {
-        const timestamp = subMinutes(now, i * 10);
-        tenMinuteData.push({
-            timestamp: format(timestamp, 'HH:mm น.'),
-            interested: `${Math.floor(Math.random() * 20) + 70}%`,
-            uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
-        });
-    }
+    const tenMinuteData = Array.from({ length: 6 }, (_, i) => ({
+      timestamp: format(subMinutes(now, (i + 1) * 10), 'HH:mm น.'),
+      interested: `${Math.floor(Math.random() * 20) + 70}%`,
+      uninterested: `${Math.floor(Math.random() * 20) + 10}%`,
+    }));
     setPer10MinuteData(tenMinuteData);
 
-    // 3. Hourly for a few hours before that. (2, 3, 4, 5 hours ago)
-    const hourlyD = [];
-    for (let i = 2; i <= 5; i++) {
-        const timestamp = subHours(now, i);
-        hourlyD.push({
-            timestamp: format(timestamp, 'HH:mm น.'),
-            interested: `${Math.floor(Math.random() * 25) + 60}%`,
-            uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
-        });
-    }
+    const hourlyD = Array.from({ length: 4 }, (_, i) => ({
+      timestamp: format(subHours(now, i + 2), 'HH:mm น.'),
+      interested: `${Math.floor(Math.random() * 25) + 60}%`,
+      uninterested: `${Math.floor(Math.random() * 25) + 15}%`,
+    }));
     setHourlyData(hourlyD);
   }, []);
 
+  const handleVideoPlay = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    
+    intervalRef.current = setInterval(async () => {
+      if (videoRef.current && canvasRef.current && modelsLoaded && !videoRef.current.paused) {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        
+        const displaySize = { width: video.clientWidth, height: video.clientHeight };
+        faceapi.matchDimensions(canvas, displaySize);
+        
+        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+          .withFaceExpressions();
+        
+        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          resizedDetections.forEach(detection => {
+            const box = detection.detection.box;
+            const expressions = detection.expressions;
+            
+            const isInterested = expressions.happy > 0.5 || expressions.neutral > 0.6;
+            const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
+            const color = isInterested ? '#4ade80' : '#f87171';
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            
+            ctx.fillStyle = color;
+            const textBackgroundHeight = 24;
+            ctx.font = `bold 16px 'Poppins'`;
+            const textWidth = ctx.measureText(thaiText).width;
+            ctx.fillRect(box.x - 1, box.y - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
+            
+            ctx.fillStyle = '#fff';
+            ctx.fillText(thaiText, box.x + 5, box.y - 6);
+          });
+        }
+      }
+    }, 200);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -109,24 +162,21 @@ export default function DashboardPage() {
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* Left Column: Video */}
         <div className="lg:col-span-2">
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>การวิเคราะห์วิดีโอสด</CardTitle>
-              <CardDescription>วิเคราะห์การแสดงออกทางสีหน้าแบบเรียลไทม์</CardDescription>
+              <CardDescription>ตรวจจับใบหน้าและวิเคราะห์อารมณ์แบบเรียลไทม์</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
-              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted">
-                 <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
-                { hasCameraPermission && (
-                  <>
-                    <BoundingBox x="15%" y="30%" width="15%" height="25%" isInterested={true} />
-                    <BoundingBox x="40%" y="45%" width="18%" height="30%" isInterested={true} />
-                    <BoundingBox x="70%" y="35%" width="16%" height="28%" isInterested={false} />
-                    <BoundingBox x="5%" y="60%" width="15%" height="25%" isInterested={true} />
-                    <BoundingBox x="80%" y="65%" width="14%" height="22%" isInterested={true} />
-                  </>
+              <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
+                 <video ref={videoRef} onPlay={handleVideoPlay} className="w-full h-full object-cover" autoPlay muted playsInline />
+                 <canvas ref={canvasRef} className="absolute top-0 left-0" />
+                { hasCameraPermission && !modelsLoaded && (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
+                      <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                      <p>กำลังโหลดโมเดลวิเคราะห์ใบหน้า...</p>
+                   </div>
                 )}
               </div>
                {hasCameraPermission === false && (
@@ -141,7 +191,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Right Column: Summary Cards */}
         <div className="lg:col-span-1 flex flex-col gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -175,7 +224,6 @@ export default function DashboardPage() {
             </Card>
         </div>
         
-        {/* Bottom Row: History */}
         <div className="lg:col-span-3">
           <Card className="h-full flex flex-col">
             <CardHeader>
