@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Cpu } from 'lucide-react';
+import { Cpu, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,8 +17,9 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [subject, setSubject] = useState('');
   const [date, setDate] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleStartObservation = () => {
+  const handleStartObservation = async () => {
     if (!name || !subject || !date) {
       toast({
         variant: 'destructive',
@@ -25,19 +28,34 @@ export default function LoginPage() {
       });
       return;
     }
+    
+    setIsLoading(true);
 
     try {
-        localStorage.setItem('observerName', name);
-        localStorage.setItem('observerSubject', subject);
-        localStorage.setItem('observerDate', date);
-        router.push('/dashboard');
+      // Save session info to Firestore
+      const sessionDocRef = await addDoc(collection(db, "observation_sessions"), {
+        observerName: name,
+        subject: subject,
+        observationDate: date,
+        createdAt: serverTimestamp(),
+      });
+      
+      // Save session info to localStorage for use in the dashboard
+      localStorage.setItem('observerName', name);
+      localStorage.setItem('observerSubject', subject);
+      localStorage.setItem('observerDate', date);
+      localStorage.setItem('currentSessionId', sessionDocRef.id); // Save the new session ID
+
+      router.push('/dashboard');
+
     } catch (error) {
-        console.error("Failed to access localStorage:", error);
-        toast({
-            variant: 'destructive',
-            title: 'เกิดข้อผิดพลาด',
-            description: 'ไม่สามารถบันทึกข้อมูลได้ โปรดลองอีกครั้ง',
-        });
+      console.error("Failed to create session or access localStorage:", error);
+      toast({
+        variant: 'destructive',
+        title: 'เกิดข้อผิดพลาด',
+        description: 'ไม่สามารถเริ่มเซสชันได้ โปรดตรวจสอบการตั้งค่า Firebase และลองอีกครั้ง',
+      });
+      setIsLoading(false);
     }
   };
 
@@ -61,6 +79,7 @@ export default function LoginPage() {
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -72,6 +91,7 @@ export default function LoginPage() {
               required
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -82,6 +102,7 @@ export default function LoginPage() {
               required
               value={date}
               onChange={(e) => setDate(e.target.value)}
+              disabled={isLoading}
             />
           </div>
           <Button
@@ -89,8 +110,9 @@ export default function LoginPage() {
             className="w-full font-bold text-lg mt-2"
             size="lg"
             onClick={handleStartObservation}
+            disabled={isLoading}
           >
-            เริ่มการสังเกตการณ์
+            {isLoading ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
           </Button>
         </CardContent>
       </Card>
