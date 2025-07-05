@@ -141,8 +141,19 @@ export default function DashboardPage() {
   }, []); // Run only once on mount
 
   const handleExport = () => {
+    const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
+    const observerSubject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
+    const observerDate = localStorage.getItem('observerDate') || 'ไม่มีข้อมูล';
+
+    const loginInfoRows = [
+      `ชื่อผู้สังเกตการณ์:,${observerName}`,
+      `วิชา:,${observerSubject}`,
+      `วันที่:,${observerDate}`,
+      ""
+    ];
+    
     const headers = ["หมวดหมู่", "เวลา", "จำนวนคน", "สนใจ", "ไม่สนใจ"];
-    let csvRows = [headers.join(",")];
+    let dataRows = [headers.join(",")];
 
     const addDataToCsv = (data: any[], category: string) => {
         data.forEach(entry => {
@@ -150,10 +161,10 @@ export default function DashboardPage() {
                 category,
                 entry.timestamp,
                 entry.personCount,
-                entry.interested,
-                entry.uninterested
+                `"${entry.interested}"`,
+                `"${entry.uninterested}"`
             ].join(",");
-            csvRows.push(row);
+            dataRows.push(row);
         });
     };
 
@@ -161,7 +172,7 @@ export default function DashboardPage() {
     addDataToCsv(per10MinuteData, "ราย 10 นาที");
     addDataToCsv(hourlyData, "รายชั่วโมง");
 
-    const csvContent = "\uFEFF" + csvRows.join("\n");
+    const csvContent = "\uFEFF" + [...loginInfoRows, ...dataRows].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -416,4 +427,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
