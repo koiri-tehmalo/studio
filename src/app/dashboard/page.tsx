@@ -10,6 +10,8 @@ import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { useCamera } from '@/providers/camera-provider';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -76,7 +78,7 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    const dataCaptureInterval = setInterval(() => {
+    const dataCaptureInterval = setInterval(async () => {
       const now = new Date();
       
       const frameCount = minuteFrameCountRef.current;
@@ -92,26 +94,47 @@ export default function DashboardPage() {
         const avgInterested = Math.round(totalInterested / frameCount);
         const avgUninterested = avgPersonCount - avgInterested;
 
+        // For local display
         const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
         const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
 
-        const newEntry = {
+        const newDisplayEntry = {
           timestamp: format(now, 'HH:mm น.'),
           personCount: avgPersonCount,
           interested: interestedPercent,
           uninterested: uninterestedPercent,
         };
 
-        setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 59)]);
-
+        setPerMinuteData(prevData => [newDisplayEntry, ...prevData.slice(0, 59)]);
         if (now.getMinutes() % 10 === 0) {
-          const new10MinEntry = { ...newEntry, timestamp: format(now, 'HH:mm น.') };
+          const new10MinEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:mm น.') };
           setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
         }
-        
         if (now.getMinutes() === 0) {
-          const newHourlyEntry = { ...newEntry, timestamp: format(now, 'HH:00 น.') };
+          const newHourlyEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:00 น.') };
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
+        }
+
+        // Save data to Firestore
+        try {
+          const sessionId = localStorage.getItem('currentSessionId');
+          if (sessionId) {
+            const dataToSave = {
+              personCount: avgPersonCount,
+              interestedCount: avgInterested,
+              uninterestedCount: avgUninterested,
+              createdAt: serverTimestamp(),
+            };
+            const sessionDataCollectionRef = collection(db, "observation_sessions", sessionId, "timeline_entries");
+            await addDoc(sessionDataCollectionRef, dataToSave);
+          }
+        } catch (error) {
+            console.error("Failed to save data to Firestore:", error);
+            toast({
+                variant: 'destructive',
+                title: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
+                description: 'ไม่สามารถบันทึกข้อมูลการวิเคราะห์ลงฐานข้อมูลได้',
+            });
         }
       }
     }, 60000);
@@ -119,7 +142,7 @@ export default function DashboardPage() {
     return () => {
       clearInterval(dataCaptureInterval);
     };
-  }, []);
+  }, [toast]);
 
   const handleExport = () => {
     const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
