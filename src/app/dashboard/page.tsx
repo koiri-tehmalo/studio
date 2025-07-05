@@ -10,8 +10,6 @@ import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { useCamera } from '@/providers/camera-provider';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -113,28 +111,6 @@ export default function DashboardPage() {
         if (now.getMinutes() === 0) {
           const newHourlyEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:00 น.') };
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
-        }
-
-        // Save data to Firestore
-        try {
-          const sessionId = localStorage.getItem('currentSessionId');
-          if (sessionId) {
-            const dataToSave = {
-              personCount: avgPersonCount,
-              interestedCount: avgInterested,
-              uninterestedCount: avgUninterested,
-              createdAt: serverTimestamp(),
-            };
-            const sessionDataCollectionRef = collection(db, "observation_sessions", sessionId, "timeline_entries");
-            await addDoc(sessionDataCollectionRef, dataToSave);
-          }
-        } catch (error) {
-            console.error("Failed to save data to Firestore:", error);
-            toast({
-                variant: 'destructive',
-                title: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล',
-                description: 'ไม่สามารถบันทึกข้อมูลการวิเคราะห์ลงฐานข้อมูลได้',
-            });
         }
       }
     }, 60000);
