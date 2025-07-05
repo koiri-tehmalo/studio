@@ -9,6 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -25,6 +27,7 @@ export default function DashboardPage() {
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
+  const [selectedFace, setSelectedFace] = useState<string>('all');
 
   // Refs for accumulating data for 1-minute averages
   const minuteFrameCountRef = useRef(0);
@@ -89,6 +92,14 @@ export default function DashboardPage() {
 
     getCameraPermission();
   }, [toast]);
+  
+  useEffect(() => {
+    const selectedIdx = parseInt(selectedFace, 10);
+    // Reset if the selected face index is out of bounds
+    if (selectedFace !== 'all' && selectedIdx >= realtimeStudentCount) {
+      setSelectedFace('all');
+    }
+  }, [realtimeStudentCount, selectedFace]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(() => {
@@ -226,9 +237,15 @@ export default function DashboardPage() {
         if (isInterested) {
           currentInterested++;
         }
+
+        const isSelected = selectedFace !== 'all' && parseInt(selectedFace, 10) === i;
         
         const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
-        const color = isInterested ? '#4ade80' : '#f87171';
+        let color = isInterested ? '#4ade80' : '#f87171';
+        if (isSelected) {
+            color = '#9575CD'; // Muted purple accent color for highlight
+        }
+
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
@@ -307,6 +324,24 @@ export default function DashboardPage() {
                     โปรดอนุญาตให้เข้าถึงกล้องเพื่อใช้คุณสมบัตินี้
                   </AlertDescription>
                 </Alert>
+              )}
+               {realtimeStudentCount > 2 && (
+                <div className="w-full mt-2">
+                  <Label htmlFor="face-selector" className="mb-2 block">โฟกัสที่นักเรียน</Label>
+                  <Select onValueChange={setSelectedFace} value={selectedFace}>
+                    <SelectTrigger id="face-selector" className="w-full">
+                      <SelectValue placeholder="เลือกนักเรียนเพื่อเน้น" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">นักเรียนทุกคน</SelectItem>
+                      {Array.from({ length: realtimeStudentCount }, (_, i) => (
+                        <SelectItem key={i} value={String(i)}>
+                          นักเรียนคนที่ {i + 1}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -416,4 +451,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
