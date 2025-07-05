@@ -121,11 +121,12 @@ export default function DashboardPage() {
           try {
             const timelineRef = collection(db, "sessions", sessionId, "timeline");
             await addDoc(timelineRef, {
-              timestamp: new Date(), // Using client's date. For more accuracy, use serverTimestamp()
+              timestamp: new Date(),
               personCount: avgPersonCount,
               interestedCount: avgInterested,
               uninterestedCount: avgUninterested
             });
+            console.log(`Data saved to Firestore for session ${sessionId} at ${new Date().toISOString()}`);
           } catch (error) {
             console.error("Failed to save timeline data:", error);
             toast({
@@ -136,7 +137,7 @@ export default function DashboardPage() {
           }
         }
       }
-    }, 60000);
+    }, 10000); // Save every 10 seconds for easier testing
 
     return () => {
       clearInterval(dataCaptureInterval);
