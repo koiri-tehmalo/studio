@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { useCamera } from '@/providers/camera-provider';
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -16,7 +17,6 @@ export default function DashboardPage() {
   const animationFrameId = useRef<number>();
   
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | undefined>(undefined);
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
   const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
@@ -26,10 +26,17 @@ export default function DashboardPage() {
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
 
-  // Refs for accumulating data for 1-minute averages
   const minuteFrameCountRef = useRef(0);
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
+
+  const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
+
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
   
   useEffect(() => {
     const createFaceLandmarker = async () => {
@@ -44,7 +51,7 @@ export default function DashboardPage() {
           },
           outputFaceBlendshapes: true,
           runningMode: "VIDEO",
-          numFaces: 20, // Increased to detect more faces
+          numFaces: 20,
         });
         setFaceLandmarker(landmarker);
         setModelsLoaded(true);
@@ -65,30 +72,7 @@ export default function DashboardPage() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast]);
-
-  useEffect(() => {
-    const getCameraPermission = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setHasCameraPermission(true);
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (error) {
-        console.error('Error accessing camera:', error);
-        setHasCameraPermission(false);
-        toast({
-          variant: 'destructive',
-          title: 'การเข้าถึงกล้องถูกปฏิเสธ',
-          description: 'โปรดเปิดใช้งานการเข้าถึงกล้องในการตั้งค่าเบราว์เซอร์ของคุณ',
-        });
-      }
-    };
-
-    getCameraPermission();
-  }, [toast]);
+  }, [toast, faceLandmarker]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(() => {
@@ -98,7 +82,6 @@ export default function DashboardPage() {
       const totalStudents = minuteTotalStudentCountRef.current;
       const totalInterested = minuteTotalInterestedCountRef.current;
 
-      // Reset accumulators for the next minute immediately to avoid missing frames.
       minuteFrameCountRef.current = 0;
       minuteTotalStudentCountRef.current = 0;
       minuteTotalInterestedCountRef.current = 0;
@@ -118,27 +101,24 @@ export default function DashboardPage() {
           uninterested: uninterestedPercent,
         };
 
-        // Update per-minute data every minute
-        setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 9)]);
+        setPerMinuteData(prevData => [newEntry, ...prevData.slice(0, 59)]);
 
-        // Update 10-minute data every 10 minutes
         if (now.getMinutes() % 10 === 0) {
           const new10MinEntry = { ...newEntry, timestamp: format(now, 'HH:mm น.') };
           setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
         }
         
-        // Update hourly data every hour
         if (now.getMinutes() === 0) {
           const newHourlyEntry = { ...newEntry, timestamp: format(now, 'HH:00 น.') };
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
         }
       }
-    }, 60000); // 60 seconds
+    }, 60000);
 
     return () => {
       clearInterval(dataCaptureInterval);
     };
-  }, []); // Run only once on mount
+  }, []);
 
   const handleExport = () => {
     const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
@@ -152,7 +132,7 @@ export default function DashboardPage() {
       ""
     ];
     
-    const headers = ["หมวดหมู่", "เวลา", "จำนวนคน", "สนใจ", "ไม่สนใจ"];
+    const headers = ["หมวดหมู่", "เวลา", "จำนวนคน (เฉลี่ย)", "สนใจ", "ไม่สนใจ"];
     let dataRows = [headers.join(",")];
 
     const addDataToCsv = (data: any[], category: string) => {
@@ -168,7 +148,7 @@ export default function DashboardPage() {
         });
     };
 
-    addDataToCsv(perMinuteData, "10 นาทีล่าสุด");
+    addDataToCsv(perMinuteData, "60 นาทีล่าสุด");
     addDataToCsv(per10MinuteData, "ราย 10 นาที");
     addDataToCsv(hourlyData, "รายชั่วโมง");
 
@@ -258,7 +238,6 @@ export default function DashboardPage() {
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
       
-      // Accumulate data for 1-minute average
       minuteFrameCountRef.current++;
       minuteTotalStudentCountRef.current += results.faceLandmarks.length;
       minuteTotalInterestedCountRef.current += currentInterested;
@@ -278,6 +257,8 @@ export default function DashboardPage() {
   const interestedPercentage = realtimeStudentCount > 0 ? Math.round((interestedCount / realtimeStudentCount) * 100) : 0;
   const uninterestedPercentage = realtimeStudentCount > 0 ? Math.round((uninterestedCount / realtimeStudentCount) * 100) : 0;
 
+  const showLoadingOverlay = isCameraLoading || !modelsLoaded;
+  const loadingText = isCameraLoading ? "กำลังเปิดกล้อง..." : !modelsLoaded ? "กำลังโหลดโมเดลวิเคราะห์ใบหน้า..." : "";
 
   return (
     <div className="flex flex-col gap-6">
@@ -304,10 +285,10 @@ export default function DashboardPage() {
               <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
                  <video ref={videoRef} onPlay={handleVideoPlay} className="w-full h-full object-cover" autoPlay muted playsInline />
                  <canvas ref={canvasRef} className="absolute top-0 left-0" />
-                { hasCameraPermission && !modelsLoaded && (
+                { showLoadingOverlay && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
                       <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                      <p>กำลังโหลดโมเดลวิเคราะห์ใบหน้า...</p>
+                      <p>{loadingText}</p>
                    </div>
                 )}
               </div>
@@ -360,7 +341,7 @@ export default function DashboardPage() {
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>ข้อมูลย้อนหลัง</CardTitle>
-              <CardDescription>ภาพรวมการมีส่วนร่วมตามช่วงเวลา</CardDescription>
+              <CardDescription>ภาพรวมการมีส่วนร่วมตามช่วงเวลา (เฉลี่ยต่อนาที)</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0">
               <Table>
@@ -376,7 +357,7 @@ export default function DashboardPage() {
                   {perMinuteData.length > 0 && (
                   <TableRow>
                       <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-                          10 นาทีล่าสุด
+                          60 นาทีล่าสุด
                       </TableCell>
                   </TableRow>
                   )}
