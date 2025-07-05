@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Cpu } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -111,8 +111,44 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [avatarSrc, setAvatarSrc] = useState('https://placehold.co/40x40.png');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const savedAvatar = localStorage.getItem('userAvatar');
+    if (savedAvatar) {
+      setAvatarSrc(savedAvatar);
+    }
+  }, []);
+
+  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (typeof e.target?.result === 'string') {
+          const dataUrl = e.target.result;
+          setAvatarSrc(dataUrl);
+          localStorage.setItem('userAvatar', dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleTriggerClick = () => {
+    fileInputRef.current?.click();
+  };
+  
   return (
     <CameraProvider>
+       <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleAvatarChange}
+        className="hidden"
+        accept="image/*"
+      />
       <div className="flex flex-col h-screen bg-background">
         <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
           <div className="flex items-center gap-4">
@@ -133,7 +169,7 @@ export default function DashboardLayout({
                   className="overflow-hidden rounded-full"
                 >
                   <Avatar>
-                    <AvatarImage src="https://placehold.co/40x40.png" alt="User" data-ai-hint="user avatar" />
+                    <AvatarImage src={avatarSrc} alt="User" data-ai-hint="user avatar" />
                     <AvatarFallback>ผ</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -141,6 +177,12 @@ export default function DashboardLayout({
               <DropdownMenuContent align="end">
                 <DropdownMenuLabel>บัญชีของฉัน</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={(e) => {
+                  e.preventDefault();
+                  handleTriggerClick();
+                }}>
+                  เปลี่ยนรูปโปรไฟล์
+                </DropdownMenuItem>
                 <CameraSettingsDialog />
                 <SupportDialog />
                 <DropdownMenuSeparator />
