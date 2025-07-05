@@ -39,12 +39,13 @@ export default function DashboardPage() {
   }, [stream]);
   
   useEffect(() => {
+    let landmarker: FaceLandmarker | undefined;
     const createFaceLandmarker = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
         );
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
             delegate: "GPU",
@@ -67,12 +68,12 @@ export default function DashboardPage() {
     createFaceLandmarker();
     
     return () => {
-      faceLandmarker?.close();
+      landmarker?.close();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast, faceLandmarker]);
+  }, [toast]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(() => {
