@@ -10,6 +10,8 @@ import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import { useCamera } from '@/providers/camera-provider';
+import { db } from '@/lib/firebase';
+import { collection, addDoc } from "firebase/firestore";
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -111,6 +113,27 @@ export default function DashboardPage() {
         if (now.getMinutes() === 0) {
           const newHourlyEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:00 น.') };
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
+        }
+
+        // Save to Firestore
+        const sessionId = localStorage.getItem('currentSessionId');
+        if (sessionId) {
+          try {
+            const timelineRef = collection(db, "sessions", sessionId, "timeline");
+            await addDoc(timelineRef, {
+              timestamp: new Date(), // Using client's date. For more accuracy, use serverTimestamp()
+              personCount: avgPersonCount,
+              interestedCount: avgInterested,
+              uninterestedCount: avgUninterested
+            });
+          } catch (error) {
+            console.error("Failed to save timeline data:", error);
+            toast({
+                variant: 'destructive',
+                title: 'เกิดข้อผิดพลาดในการบันทึก',
+                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
+            });
+          }
         }
       }
     }, 60000);

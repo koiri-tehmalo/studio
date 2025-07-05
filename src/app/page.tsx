@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Cpu, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,28 +32,28 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // The database write operation was causing the application to hang,
-      // likely due to restrictive default Firestore security rules.
-      // This step has been bypassed to allow the application to proceed.
-      // To re-enable data persistence, the user must update their Firestore rules.
+      // Add a new document with a generated id.
+      const sessionRef = await addDoc(collection(db, "sessions"), {
+        observerName: name,
+        subject: subject,
+        date: date,
+        createdAt: serverTimestamp()
+      });
       
       // Save session info to localStorage for use in the dashboard
       localStorage.setItem('observerName', name);
       localStorage.setItem('observerSubject', subject);
       localStorage.setItem('observerDate', date);
-      
-      // Removing the session ID ensures that the dashboard page won't try to
-      // write timeline data to a non-existent session.
-      localStorage.removeItem('currentSessionId');
+      localStorage.setItem('currentSessionId', sessionRef.id);
 
       router.push('/dashboard');
 
     } catch (error) {
-      console.error("Failed to access localStorage:", error);
+      console.error("Failed to start session:", error);
       toast({
         variant: 'destructive',
         title: 'เกิดข้อผิดพลาด',
-        description: 'ไม่สามารถเริ่มเซสชันได้ โปรดลองอีกครั้ง',
+        description: 'ไม่สามารถเริ่มเซสชันได้ โปรดตรวจสอบการตั้งค่า Firebase และกฎความปลอดภัย',
       });
       setIsLoading(false);
     }
