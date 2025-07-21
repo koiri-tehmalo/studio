@@ -9,9 +9,12 @@ import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import * as tf from '@tensorflow/tfjs';
 import { useCamera } from '@/providers/camera-provider';
 import { db } from '@/lib/firebase';
 import { collection, addDoc } from "firebase/firestore";
+
+const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
 
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -19,6 +22,7 @@ export default function DashboardPage() {
   const animationFrameId = useRef<number>();
   
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | undefined>(undefined);
+  const [cnnModel, setCnnModel] = useState<tf.LayersModel | undefined>(undefined);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
   const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
@@ -41,25 +45,29 @@ export default function DashboardPage() {
   }, [stream]);
   
   useEffect(() => {
-    let landmarker: FaceLandmarker | undefined;
-    const createFaceLandmarker = async () => {
+    const loadModels = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
         );
-        landmarker = await FaceLandmarker.createFromOptions(vision, {
+        const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
             delegate: "GPU",
           },
-          outputFaceBlendshapes: true,
+          outputFaceBlendshapes: true, // Keep for bounding box, even if not for logic
           runningMode: "VIDEO",
           numFaces: 20,
         });
         setFaceLandmarker(landmarker);
+
+        await tf.setBackend('webgl');
+        const model = await tf.loadLayersModel('/model/model.json');
+        setCnnModel(model);
+
         setModelsLoaded(true);
       } catch (error) {
-        console.error("Failed to load MediaPipe models:", error);
+        console.error("Failed to load AI models:", error);
         toast({
           variant: 'destructive',
           title: 'ไม่สามารถโหลดโมเดล AI',
@@ -67,10 +75,11 @@ export default function DashboardPage() {
         });
       }
     };
-    createFaceLandmarker();
+    loadModels();
     
     return () => {
-      landmarker?.close();
+      faceLandmarker?.close();
+      cnnModel?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
@@ -94,7 +103,6 @@ export default function DashboardPage() {
         const avgInterested = Math.round(totalInterested / frameCount);
         const avgUninterested = avgPersonCount - avgInterested;
 
-        // For local display
         const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
         const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
 
@@ -115,7 +123,6 @@ export default function DashboardPage() {
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
         }
 
-        // Save to Firestore
         const sessionId = localStorage.getItem('currentSessionId');
         if (sessionId) {
           try {
@@ -188,8 +195,8 @@ export default function DashboardPage() {
     document.body.removeChild(link);
   };
 
-  const predictWebcam = () => {
-    if (!videoRef.current || !canvasRef.current || !faceLandmarker || videoRef.current.paused || videoRef.current.readyState < 2) {
+  const predictWebcam = async () => {
+    if (!videoRef.current || !canvasRef.current || !faceLandmarker || !cnnModel || videoRef.current.paused || videoRef.current.readyState < 2) {
       if(videoRef.current && !videoRef.current.paused) {
         animationFrameId.current = requestAnimationFrame(predictWebcam);
       }
@@ -212,16 +219,14 @@ export default function DashboardPage() {
       for (let i = 0; i < results.faceLandmarks.length; i++) {
         const landmarks = results.faceLandmarks[i];
         
-        let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+        let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
         for (const landmark of landmarks) {
-            const x = landmark.x * canvas.width;
-            const y = landmark.y * canvas.height;
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
+            minX = Math.min(minX, landmark.x * video.videoWidth);
+            maxX = Math.max(maxX, landmark.x * video.videoWidth);
+            minY = Math.min(minY, landmark.y * video.videoHeight);
+            maxY = Math.max(maxY, landmark.y * video.videoHeight);
         }
-        const padding = 10;
+        const padding = 20;
         const box = {
             x: minX - padding,
             y: minY - padding,
@@ -229,35 +234,47 @@ export default function DashboardPage() {
             height: (maxY - minY) + (padding * 2)
         };
         
-        const blendshapes = results.faceBlendshapes[i]?.categories;
-        if (!blendshapes) continue;
+        const isInterested = await tf.tidy(() => {
+          const faceImage = tf.browser.fromPixels(video, 3)
+            .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
+            .resizeBilinear([48, 48])
+            .mean(2) // Grayscale
+            .toFloat()
+            .div(tf.scalar(255.0))
+            .expandDims(0)
+            .expandDims(-1);
+          
+          const prediction = cnnModel.predict(faceImage) as tf.Tensor;
+          const [uninterestedScore, interestedScore] = prediction.dataSync();
 
-        const smileScore = (blendshapes.find(c => c.categoryName === 'mouthSmileLeft')?.score ?? 0) + 
-                         (blendshapes.find(c => c.categoryName === 'mouthSmileRight')?.score ?? 0);
+          return interestedScore > uninterestedScore;
+        });
 
-        const neutralScore = blendshapes.find(c => c.categoryName === '_neutral')?.score ?? 0;
-
-        const isInterested = smileScore > 0.4 || neutralScore > 0.8;
         if (isInterested) {
           currentInterested++;
         }
+
+        const canvasX = box.x * (canvas.width / video.videoWidth);
+        const canvasY = box.y * (canvas.height / video.videoHeight);
+        const canvasWidth = box.width * (canvas.width / video.videoWidth);
+        const canvasHeight = box.height * (canvas.height / video.videoHeight);
         
-        const thaiText = isInterested ? 'สนใจ' : 'ไม่สนใจ';
+        const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
         const color = isInterested ? '#4ade80' : '#f87171';
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
-        ctx.strokeRect(box.x, box.y, box.width, box.height);
+        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
         
         ctx.fillStyle = color;
         const textBackgroundHeight = 24;
         ctx.font = `bold 16px 'Poppins'`;
         const textWidth = ctx.measureText(thaiText).width;
         
-        ctx.fillRect(box.x - 1, box.y - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
+        ctx.fillRect(canvasX - 1, canvasY - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
         
         ctx.fillStyle = '#fff';
-        ctx.fillText(thaiText, box.x + 5, box.y - 6);
+        ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
