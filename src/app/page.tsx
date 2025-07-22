@@ -1,30 +1,45 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Cpu, Loader2 } from 'lucide-react';
+import { Cpu, Loader2, LogIn } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { auth } from '@/lib/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import Link from 'next/link';
+import { useAuth } from '@/providers/auth-provider';
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [name, setName] = useState('');
-  const [subject, setSubject] = useState('');
-  const [date, setDate] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const { user, isLoading: isAuthLoading } = useAuth();
 
-  const handleStartObservation = async () => {
-    if (!name || !subject || !date) {
+  if (isAuthLoading) {
+     return (
+        <div className="flex justify-center items-center h-screen">
+            <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        </div>
+    );
+  }
+
+  if (user) {
+    redirect('/dashboard');
+  }
+
+
+  const handleLogin = async () => {
+    if (!email || !password) {
       toast({
         variant: 'destructive',
         title: 'ข้อมูลไม่ครบถ้วน',
-        description: 'กรุณากรอกข้อมูลให้ครบทุกช่อง',
+        description: 'กรุณากรอกอีเมลและรหัสผ่าน',
       });
       return;
     }
@@ -32,30 +47,25 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      // Add a new document with a generated id.
-      const sessionRef = await addDoc(collection(db, "sessions"), {
-        observerName: name,
-        subject: subject,
-        date: date,
-        createdAt: serverTimestamp()
+      await signInWithEmailAndPassword(auth, email, password);
+      toast({
+        title: 'เข้าสู่ระบบสำเร็จ',
       });
-      
-      // Save session info to localStorage for use in the dashboard
-      localStorage.setItem('observerName', name);
-      localStorage.setItem('observerSubject', subject);
-      localStorage.setItem('observerDate', date);
-      localStorage.setItem('currentSessionId', sessionRef.id);
-
       router.push('/dashboard');
 
-    } catch (error) {
-      console.error("Failed to start session:", error);
+    } catch (error: any) {
+      console.error("Failed to sign in:", error);
+       let description = 'เกิดข้อผิดพลาดที่ไม่คาดคิด โปรดลองอีกครั้ง';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        description = 'อีเมลหรือรหัสผ่านไม่ถูกต้อง';
+      }
       toast({
         variant: 'destructive',
-        title: 'เกิดข้อผิดพลาด',
-        description: 'ไม่สามารถเริ่มเซสชันได้ โปรดตรวจสอบการตั้งค่า Firebase และกฎความปลอดภัย',
+        title: 'เข้าสู่ระบบล้มเหลว',
+        description: description,
       });
-      setIsLoading(false);
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -67,41 +77,29 @@ export default function LoginPage() {
              <Cpu size={48} className="text-primary" />
           </div>
           <CardTitle className="text-3xl font-headline">ผู้สังเกตการณ์ห้องเรียน</CardTitle>
-          <CardDescription>กรุณากรอกข้อมูลเพื่อเริ่มการสังเกตการณ์</CardDescription>
+          <CardDescription>กรุณาเข้าสู่ระบบเพื่อเริ่มการใช้งาน</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">ชื่อ</Label>
+            <Label htmlFor="email">อีเมล</Label>
             <Input
-              id="name"
-              type="text"
-              placeholder="ชื่อ-นามสกุล"
+              id="email"
+              type="email"
+              placeholder="m@example.com"
               required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="subject">วิชา</Label>
+            <Label htmlFor="password">รหัสผ่าน</Label>
             <Input
-              id="subject"
-              type="text"
-              placeholder="ชื่อวิชาที่สอน"
+              id="password"
+              type="password"
               required
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              disabled={isLoading}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="date">วันที่</Label>
-            <Input
-              id="date"
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
             />
           </div>
@@ -109,11 +107,17 @@ export default function LoginPage() {
             type="button"
             className="w-full font-bold text-lg mt-2"
             size="lg"
-            onClick={handleStartObservation}
+            onClick={handleLogin}
             disabled={isLoading}
           >
-            {isLoading ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
+            {isLoading ? <Loader2 className="animate-spin" /> : <><LogIn className="mr-2"/> เข้าสู่ระบบ</>}
           </Button>
+           <p className="text-center text-sm text-muted-foreground">
+              ยังไม่มีบัญชี?{' '}
+              <Link href="/register" className="underline hover:text-primary">
+                ลงทะเบียนที่นี่
+              </Link>
+            </p>
         </CardContent>
       </Card>
     </main>

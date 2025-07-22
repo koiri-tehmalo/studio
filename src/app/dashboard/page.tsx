@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -7,19 +6,29 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen } from 'lucide-react';
+import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen, Clock, History, BarChart2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useCamera } from '@/providers/camera-provider';
 import { db } from '@/lib/firebase';
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from "firebase/firestore";
+import { useAuth } from '@/providers/auth-provider';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
 
 interface FaceData {
   image: string;
   interested: boolean;
+}
+
+interface HistoricalData {
+    timestamp: string;
+    personCount: number;
+    interested: string;
+    uninterested: string;
 }
 
 export default function DashboardPage() {
@@ -30,9 +39,8 @@ export default function DashboardPage() {
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | undefined>(undefined);
   const [cnnModel, setCnnModel] = useState<tf.LayersModel | undefined>(undefined);
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
-  const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
-  const [hourlyData, setHourlyData] = useState<any[]>([]);
+  const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
+
   const { toast } = useToast();
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
@@ -40,6 +48,7 @@ export default function DashboardPage() {
   
   const [observerName, setObserverName] = useState('');
   const [observerSubject, setObserverSubject] = useState('');
+  const [observerDate, setObserverDate] = useState('');
 
   const minuteFrameCountRef = useRef(0);
   const minuteTotalStudentCountRef = useRef(0);
@@ -49,27 +58,27 @@ export default function DashboardPage() {
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
   const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const [isStartingSession, setIsStartingSession] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
+  const { user, userName } = useAuth();
 
-  useEffect(() => {
-    // Check if window is defined (we are on the client side)
-    if (typeof window !== 'undefined') {
-        const name = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
-        const subject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
-        setObserverName(name);
-        setObserverSubject(subject);
-    }
-  }, []);
+   useEffect(() => {
+     if (userName) {
+       setObserverName(userName);
+     }
+   }, [userName]);
 
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(e => console.error("Video play failed:", e));
     }
   }, [stream]);
   
   useEffect(() => {
-    // Create a temporary canvas for cropping faces
     tempCanvasRef.current = document.createElement('canvas');
 
     const loadModels = async () => {
@@ -82,7 +91,7 @@ export default function DashboardPage() {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
             delegate: "GPU",
           },
-          outputFaceBlendshapes: true, // Keep for bounding box, even if not for logic
+          outputFaceBlendshapes: true,
           runningMode: "VIDEO",
           numFaces: 20,
         });
@@ -98,7 +107,7 @@ export default function DashboardPage() {
         toast({
           variant: 'destructive',
           title: 'ไม่สามารถโหลดโมเดล AI',
-          description: 'โปรดตรวจสอบว่าคุณได้ย้ายโฟลเดอร์ model ไปไว้ใน public แล้ว และรีเฟรชหน้าเว็บ',
+          description: 'โปรดตรวจสอบ Console เพื่อดูรายละเอียดและรีเฟรชหน้าเว็บ',
         });
       }
     };
@@ -114,10 +123,10 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    const dataCaptureInterval = setInterval(async () => {
-      const now = new Date();
+    if (!sessionStarted || !currentSessionId) return;
 
-      setFacesForDisplay(liveCroppedFaces);
+    const dataCaptureInterval = setInterval(async () => {
+      setFacesForDisplay([...liveCroppedFaces]);
       
       const frameCount = minuteFrameCountRef.current;
       const totalStudents = minuteTotalStudentCountRef.current;
@@ -136,99 +145,85 @@ export default function DashboardPage() {
         const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
 
         const newDisplayEntry = {
-          timestamp: format(now, 'HH:mm น.'),
+          timestamp: format(new Date(), 'HH:mm:ss น.'),
           personCount: avgPersonCount,
           interested: interestedPercent,
           uninterested: uninterestedPercent,
         };
+        
+        setHistoricalData(prevData => [newDisplayEntry, ...prevData]);
 
-        setPerMinuteData(prevData => [newDisplayEntry, ...prevData.slice(0, 59)]);
-        if (now.getMinutes() % 10 === 0) {
-          const new10MinEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:mm น.') };
-          setPer10MinuteData(prevData => [new10MinEntry, ...prevData.slice(0, 5)]);
-        }
-        if (now.getMinutes() === 0) {
-          const newHourlyEntry = { ...newDisplayEntry, timestamp: format(now, 'HH:00 น.') };
-          setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
-        }
-
-        if (typeof window !== 'undefined') {
-            const sessionId = localStorage.getItem('currentSessionId');
-            if (sessionId) {
-              try {
-                const timelineRef = collection(db, "sessions", sessionId, "timeline");
-                await addDoc(timelineRef, {
-                  timestamp: new Date(),
-                  personCount: avgPersonCount,
-                  interestedCount: avgInterested,
-                  uninterestedCount: avgUninterested
-                });
-                console.log(`Data saved to Firestore for session ${sessionId} at ${new Date().toISOString()}`);
-              } catch (error) {
-                console.error("Failed to save timeline data:", error);
-                toast({
-                    variant: 'destructive',
-                    title: 'เกิดข้อผิดพลาดในการบันทึก',
-                    description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
-                });
-              }
-            }
+        try {
+            const timelineRef = collection(db, "sessions", currentSessionId, "timeline");
+            await addDoc(timelineRef, {
+                timestamp: serverTimestamp(),
+                personCount: avgPersonCount,
+                interestedCount: avgInterested,
+                uninterestedCount: avgUninterested
+            });
+        } catch (error) {
+            console.error("Failed to save timeline data:", error);
+            toast({
+                variant: 'destructive',
+                title: 'เกิดข้อผิดพลาดในการบันทึก',
+                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
+            });
         }
       }
-    }, 10000); // Save every 10 seconds for easier testing
+    }, 60000); // Save every 1 minute
 
     return () => {
       clearInterval(dataCaptureInterval);
     };
-  }, [toast, liveCroppedFaces]);
+  }, [sessionStarted, currentSessionId, toast, liveCroppedFaces]);
 
-  const handleExport = () => {
-    if (typeof window === 'undefined') return;
-    const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
-    const observerSubject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
-    const observerDate = localStorage.getItem('observerDate') || 'ไม่มีข้อมูล';
-
-    const loginInfoRows = [
-      `ชื่อผู้สังเกตการณ์:,${observerName}`,
-      `วิชา:,${observerSubject}`,
-      `วันที่:,${observerDate}`,
-      ""
-    ];
-    
-    const headers = ["หมวดหมู่", "เวลา", "จำนวนคน (เฉลี่ย)", "สนใจ", "ไม่สนใจ"];
-    let dataRows = [headers.join(",")];
-
-    const addDataToCsv = (data: any[], category: string) => {
-        data.forEach(entry => {
-            const row = [
-                category,
-                entry.timestamp,
-                entry.personCount,
-                `"${entry.interested}"`,
-                `"${entry.uninterested}"`
-            ].join(",");
-            dataRows.push(row);
+  const handleStartSession = async () => {
+    if (!observerName || !observerSubject || !observerDate) {
+        toast({
+            variant: 'destructive',
+            title: 'ข้อมูลไม่ครบถ้วน',
+            description: 'กรุณากรอกข้อมูลการสังเกตการณ์ให้ครบถ้วน',
         });
-    };
-
-    addDataToCsv(perMinuteData, "60 นาทีล่าสุด");
-    addDataToCsv(per10MinuteData, "ราย 10 นาที");
-    addDataToCsv(hourlyData, "รายชั่วโมง");
-
-    const csvContent = "\uFEFF" + [...loginInfoRows, ...dataRows].join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", "ข้อมูลการมีส่วนร่วม.csv");
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        return;
+    }
+    if (!user) {
+         toast({
+            variant: 'destructive',
+            title: 'ไม่พบผู้ใช้งาน',
+            description: 'กรุณาเข้าสู่ระบบอีกครั้ง',
+        });
+        return;
+    }
+    
+    setIsStartingSession(true);
+    try {
+      const sessionRef = await addDoc(collection(db, "sessions"), {
+        observerName: observerName,
+        subject: observerSubject,
+        date: observerDate,
+        createdAt: serverTimestamp(),
+        userId: user.uid,
+      });
+      setCurrentSessionId(sessionRef.id);
+      setSessionStarted(true);
+      toast({
+        title: 'เริ่มเซสชันสำเร็จ',
+        description: `เริ่มการสังเกตการณ์วิชา ${observerSubject}`,
+      });
+    } catch (error) {
+       console.error("Error starting session:", error);
+       toast({
+            variant: 'destructive',
+            title: 'เกิดข้อผิดพลาด',
+            description: 'ไม่สามารถเริ่มเซสชันได้ โปรดลองอีกครั้ง',
+       });
+    } finally {
+        setIsStartingSession(false);
+    }
   };
 
   const predictWebcam = async () => {
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 2) {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 4 || !sessionStarted) {
       if (videoRef.current && !videoRef.current.paused) {
         animationFrameId.current = requestAnimationFrame(predictWebcam);
       }
@@ -249,10 +244,7 @@ export default function DashboardPage() {
       let currentInterested = 0;
       const faceImages: FaceData[] = [];
 
-
-      for (let i = 0; i < results.faceLandmarks.length; i++) {
-        const landmarks = results.faceLandmarks[i];
-        
+      for (const landmarks of results.faceLandmarks) {
         let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
         for (const landmark of landmarks) {
             minX = Math.min(minX, landmark.x * video.videoWidth);
@@ -262,29 +254,25 @@ export default function DashboardPage() {
         }
         const padding = 20;
 
-        let x = minX - padding;
-        let y = minY - padding;
-        let width = (maxX - minX) + (padding * 2);
-        let height = (maxY - minY) + (padding * 2);
+        const x = minX - padding;
+        const y = minY - padding;
+        const width = (maxX - minX) + (padding * 2);
+        const height = (maxY - minY) + (padding * 2);
 
-        // Clamp values to stay within video bounds
-        const clampedX = Math.max(0, x);
-        const clampedY = Math.max(0, y);
-        const clampedWidth = Math.min(width, video.videoWidth - clampedX);
-        const clampedHeight = Math.min(height, video.videoHeight - clampedY);
+        const clampedX = Math.max(0, Math.round(x));
+        const clampedY = Math.max(0, Math.round(y));
+        const clampedWidth = Math.min(Math.round(width), video.videoWidth - clampedX);
+        const clampedHeight = Math.min(Math.round(height), video.videoHeight - clampedY);
 
-        const box = {
-            x: clampedX,
-            y: clampedY,
-            width: clampedWidth,
-            height: clampedHeight
-        };
+        if (clampedWidth <= 0 || clampedHeight <= 0) continue;
+
+        const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
         
         const isInterested = await tf.tidy(() => {
-          const faceImage = tf.browser.fromPixels(video, 3)
-            .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
+          const faceImage = tf.browser.fromPixels(video)
+            .slice([box.y, box.x, 0], [box.height, box.width, 3])
             .resizeBilinear([48, 48])
-            .mean(2) // Grayscale
+            .mean(2)
             .toFloat()
             .div(tf.scalar(255.0))
             .expandDims(0)
@@ -296,12 +284,9 @@ export default function DashboardPage() {
           return interestedScore > uninterestedScore;
         });
 
-        if (isInterested) {
-          currentInterested++;
-        }
+        if (isInterested) currentInterested++;
         
-        // Add cropped face to display array
-        if (tempCanvasRef.current && box.width > 0 && box.height > 0) {
+        if (tempCanvasRef.current) {
             const tempCtx = tempCanvasRef.current.getContext('2d');
             if (tempCtx) {
                 tempCanvasRef.current.width = box.width;
@@ -349,9 +334,7 @@ export default function DashboardPage() {
   };
 
   const handleVideoPlay = () => {
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-    }
+    if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     animationFrameId.current = requestAnimationFrame(predictWebcam);
   };
 
@@ -362,6 +345,64 @@ export default function DashboardPage() {
   const showLoadingOverlay = isCameraLoading || !modelsLoaded;
   const loadingText = isCameraLoading ? "กำลังเปิดกล้อง..." : !modelsLoaded ? "กำลังโหลดโมเดลวิเคราะห์ใบหน้า..." : "";
 
+  if (!sessionStarted) {
+    return (
+       <div className="flex items-center justify-center h-full">
+            <Card className="w-full max-w-lg">
+                <CardHeader>
+                    <CardTitle className="text-2xl font-headline">เริ่มการสังเกตการณ์ใหม่</CardTitle>
+                    <CardDescription>กรอกข้อมูลเพื่อเริ่มบันทึกและวิเคราะห์เซสชันใหม่</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <div className="space-y-2">
+                        <Label htmlFor="name">ชื่อผู้สังเกตการณ์</Label>
+                        <Input
+                        id="name"
+                        type="text"
+                        value={observerName}
+                        readOnly
+                        disabled
+                        className="bg-muted"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="subject">วิชา</Label>
+                        <Input
+                        id="subject"
+                        type="text"
+                        placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์"
+                        required
+                        value={observerSubject}
+                        onChange={(e) => setObserverSubject(e.target.value)}
+                        disabled={isStartingSession}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="date">วันที่สังเกตการณ์</Label>
+                        <Input
+                        id="date"
+                        type="date"
+                        required
+                        value={observerDate}
+                        onChange={(e) => setObserverDate(e.target.value)}
+                        disabled={isStartingSession}
+                        />
+                    </div>
+                    <Button
+                        type="button"
+                        className="w-full font-bold text-lg"
+                        size="lg"
+                        onClick={handleStartSession}
+                        disabled={isStartingSession}
+                    >
+                        {isStartingSession ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
+                    </Button>
+                </CardContent>
+            </Card>
+       </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -369,10 +410,6 @@ export default function DashboardPage() {
             <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ด</h1>
             <p className="text-muted-foreground">การวิเคราะห์การมีส่วนร่วมในห้องเรียนแบบเรียลไทม์</p>
         </div>
-        <Button variant="outline" onClick={handleExport}>
-          <FileDown className="mr-2 h-4 w-4" />
-          ส่งออกเป็น Excel
-        </Button>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -381,7 +418,7 @@ export default function DashboardPage() {
           <Card className="h-full flex flex-col">
             <CardHeader>
               <CardTitle>การวิเคราะห์วิดีโอสด</CardTitle>
-              <CardDescription>ตรวจจับใบหน้าและวิเคราะห์อารมณ์แบบเรียลไทม์</CardDescription>
+              <CardDescription>ตรวจจับและวิเคราะห์การมีส่วนร่วมจากวิดีโอแบบเรียลไทม์</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
                <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
@@ -444,11 +481,18 @@ export default function DashboardPage() {
                           <span className="font-semibold">{observerSubject}</span>
                       </div>
                   </div>
+                   <div className="flex items-center gap-4">
+                      <Clock className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">วันที่</span>
+                          <span className="font-semibold">{observerDate}</span>
+                      </div>
+                  </div>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">นักเรียนทั้งหมด</CardTitle>
+                <CardTitle className="text-sm font-medium">นักเรียนทั้งหมด (เรียลไทม์)</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -481,8 +525,11 @@ export default function DashboardPage() {
         <div className="lg:col-span-3">
           <Card className="h-full flex flex-col">
             <CardHeader>
-              <CardTitle>ข้อมูลย้อนหลัง</CardTitle>
-              <CardDescription>ภาพรวมการมีส่วนร่วมตามช่วงเวลา (เฉลี่ยต่อนาที)</CardDescription>
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                <CardTitle>ข้อมูลย้อนหลัง (สรุปทุก 1 นาที)</CardTitle>
+              </div>
+              <CardDescription>ภาพรวมการมีส่วนร่วมสำหรับเซสชันปัจจุบัน</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 overflow-y-auto p-0">
               <Table>
@@ -495,51 +542,22 @@ export default function DashboardPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {perMinuteData.length > 0 && (
-                  <TableRow>
-                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-                          60 นาทีล่าสุด
+                  {historicalData.length > 0 ? (
+                    historicalData.map((entry, index) => (
+                      <TableRow key={index}>
+                        <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
+                        <TableCell className="text-center">{entry.personCount}</TableCell>
+                        <TableCell className="text-center">{entry.interested}</TableCell>
+                        <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="h-24 text-center">
+                        ยังไม่มีข้อมูล... ข้อมูลจะแสดงที่นี่หลังจากผ่านไป 1 นาที
                       </TableCell>
-                  </TableRow>
-                  )}
-                  {perMinuteData.map((entry, index) => (
-                    <TableRow key={`minute-${index}`}>
-                      <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
-                      <TableCell className="text-center">{entry.personCount}</TableCell>
-                      <TableCell className="text-center">{entry.interested}</TableCell>
-                      <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
                     </TableRow>
-                  ))}
-                  {per10MinuteData.length > 0 && (
-                  <TableRow>
-                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-                          ราย 10 นาที
-                      </TableCell>
-                  </TableRow>
                   )}
-                  {per10MinuteData.map((entry, index) => (
-                    <TableRow key={`10min-${index}`}>
-                      <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
-                      <TableCell className="text-center">{entry.personCount}</TableCell>
-                      <TableCell className="text-center">{entry.interested}</TableCell>
-                      <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
-                    </TableRow>
-                  ))}
-                  {hourlyData.length > 0 && (
-                  <TableRow>
-                      <TableCell colSpan={4} className="pl-6 pt-4 pb-2 text-sm font-semibold text-muted-foreground">
-                          รายชั่วโมง
-                      </TableCell>
-                  </TableRow>
-                  )}
-                  {hourlyData.map((entry, index) => (
-                    <TableRow key={`hour-${index}`}>
-                      <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
-                      <TableCell className="text-center">{entry.personCount}</TableCell>
-                      <TableCell className="text-center">{entry.interested}</TableCell>
-                      <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
-                    </TableRow>
-                  ))}
                 </TableBody>
               </Table>
             </CardContent>

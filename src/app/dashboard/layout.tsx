@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Cpu } from 'lucide-react';
+import { Cpu, LogOut, PanelLeft, ShieldCheck, User, Settings, LifeBuoy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { CameraProvider, useCamera } from '@/providers/camera-provider';
+import { useAuth } from '@/providers/auth-provider';
+import { useRouter, redirect } from 'next/navigation';
 
 function CameraSettingsDialog() {
   const { devices, selectedDeviceId, setSelectedDeviceId } = useCamera();
@@ -19,7 +21,8 @@ function CameraSettingsDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          การตั้งค่า
+          <Settings className="mr-2 h-4 w-4" />
+          <span>การตั้งค่า</span>
         </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
@@ -63,7 +66,8 @@ function SupportDialog() {
     <Dialog>
       <DialogTrigger asChild>
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          สนับสนุน
+           <LifeBuoy className="mr-2 h-4 w-4" />
+           <span>สนับสนุน</span>
         </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -113,6 +117,8 @@ export default function DashboardLayout({
 }) {
   const [avatarSrc, setAvatarSrc] = useState('https://placehold.co/40x40.png');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user, userName, userRole, logout } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     const savedAvatar = localStorage.getItem('userAvatar');
@@ -120,6 +126,11 @@ export default function DashboardLayout({
       setAvatarSrc(savedAvatar);
     }
   }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push('/');
+  }
 
   const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -169,26 +180,36 @@ export default function DashboardLayout({
                   className="overflow-hidden rounded-full"
                 >
                   <Avatar>
-                    <AvatarImage src={avatarSrc} alt="User" data-ai-hint="user avatar" />
-                    <AvatarFallback>ผ</AvatarFallback>
+                    <AvatarImage src={avatarSrc} alt={userName || 'User'} data-ai-hint="user avatar" />
+                    <AvatarFallback>{userName ? userName.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuLabel>บัญชีของฉัน</DropdownMenuLabel>
+                <DropdownMenuLabel>{userName || 'My Account'}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                 {userRole === 'admin' && (
+                   <Link href="/admin" passHref>
+                    <DropdownMenuItem>
+                        <ShieldCheck className="mr-2 h-4 w-4" />
+                        <span>Admin Panel</span>
+                    </DropdownMenuItem>
+                  </Link>
+                )}
                 <DropdownMenuItem onSelect={(e) => {
                   e.preventDefault();
                   handleTriggerClick();
                 }}>
-                  เปลี่ยนรูปโปรไฟล์
+                  <User className="mr-2 h-4 w-4" />
+                  <span>เปลี่ยนรูปโปรไฟล์</span>
                 </DropdownMenuItem>
                 <CameraSettingsDialog />
                 <SupportDialog />
                 <DropdownMenuSeparator />
-                <Link href="/" passHref>
-                  <DropdownMenuItem>ออกจากระบบ</DropdownMenuItem>
-                </Link>
+                <DropdownMenuItem onClick={handleLogout}>
+                   <LogOut className="mr-2 h-4 w-4" />
+                  <span>ออกจากระบบ</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
