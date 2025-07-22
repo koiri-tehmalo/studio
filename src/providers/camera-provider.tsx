@@ -36,6 +36,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         return;
     }
     try {
+      // We need to get permission first to enumerate all devices
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       
@@ -44,14 +45,17 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       setDevices(videoDevices);
 
       const savedDeviceId = localStorage.getItem('selectedCameraId');
-      if (savedDeviceId && videoDevices.some(d => d.deviceId === savedDeviceId)) {
-        setSelectedDeviceId(savedDeviceId);
-      } else if (videoDevices.length > 0) {
-        const defaultDeviceId = videoDevices[0].deviceId;
-        setSelectedDeviceId(defaultDeviceId);
-        localStorage.setItem('selectedCameraId', defaultDeviceId);
-      }
       
+      let finalDeviceId;
+      if (savedDeviceId && videoDevices.some(d => d.deviceId === savedDeviceId)) {
+        finalDeviceId = savedDeviceId;
+      } else if (videoDevices.length > 0) {
+        finalDeviceId = videoDevices[0].deviceId;
+        localStorage.setItem('selectedCameraId', finalDeviceId);
+      }
+      setSelectedDeviceId(finalDeviceId);
+      
+      // Stop the temporary stream used for getting permissions
       tempStream.getTracks().forEach(track => track.stop());
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -76,9 +80,11 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // Only run this effect if we have permission and a device is selected
     if (selectedDeviceId && hasCameraPermission) {
       let active = true;
-      // Stop previous stream
+      
+      // Stop any previous stream
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
@@ -90,6 +96,8 @@ export function CameraProvider({ children }: { children: ReactNode }) {
           });
           if (active) {
             setStream(newStream);
+          } else {
+             newStream.getTracks().forEach(track => track.stop());
           }
         } catch (error) {
           console.error('Failed to get new stream:', error);
@@ -100,18 +108,20 @@ export function CameraProvider({ children }: { children: ReactNode }) {
           });
         }
       };
+      
       getNewStream();
 
       return () => {
         active = false;
-        // This cleanup is important, especially for StrictMode in development
+        // Cleanup function to stop the stream when the component unmounts or dependencies change
         if (stream) {
             stream.getTracks().forEach(track => track.stop());
         }
       }
     }
+  // We want this effect to re-run ONLY when selectedDeviceId or hasCameraPermission changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission, toast]);
+  }, [selectedDeviceId, hasCameraPermission]);
 
 
   const value = {
