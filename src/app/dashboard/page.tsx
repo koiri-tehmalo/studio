@@ -28,7 +28,7 @@ interface HistoricalData {
     timestamp: string;
     personCount: number;
     interested: string;
-    uninterested: string;
+uninterested: string;
 }
 
 export default function DashboardPage() {
@@ -67,7 +67,13 @@ export default function DashboardPage() {
 
    useEffect(() => {
      if (userName) {
-       setObserverName(userName);
+       const storedName = localStorage.getItem('observerName');
+       const storedSubject = localStorage.getItem('observerSubject');
+       
+       setObserverName(storedName || userName);
+       if (storedSubject) {
+         setObserverSubject(storedSubject);
+       }
      }
    }, [userName]);
 
@@ -197,6 +203,9 @@ export default function DashboardPage() {
     
     setIsStartingSession(true);
     try {
+      localStorage.setItem('observerName', observerName);
+      localStorage.setItem('observerSubject', observerSubject);
+      
       const sessionRef = await addDoc(collection(db, "sessions"), {
         observerName: observerName,
         subject: observerSubject,
@@ -360,9 +369,7 @@ export default function DashboardPage() {
                         id="name"
                         type="text"
                         value={observerName}
-                        readOnly
-                        disabled
-                        className="bg-muted"
+                        onChange={(e) => setObserverName(e.target.value)}
                         />
                     </div>
                     <div className="space-y-2">
