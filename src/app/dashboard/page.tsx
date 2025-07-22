@@ -40,7 +40,8 @@ export default function DashboardPage() {
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
 
-  const [croppedFaces, setCroppedFaces] = useState<string[]>([]);
+  const [liveCroppedFaces, setLiveCroppedFaces] = useState<string[]>([]);
+  const [facesForDisplay, setFacesForDisplay] = useState<string[]>([]);
   const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
 
@@ -107,6 +108,8 @@ export default function DashboardPage() {
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
       const now = new Date();
+
+      setFacesForDisplay(liveCroppedFaces);
       
       const frameCount = minuteFrameCountRef.current;
       const totalStudents = minuteTotalStudentCountRef.current;
@@ -167,7 +170,7 @@ export default function DashboardPage() {
     return () => {
       clearInterval(dataCaptureInterval);
     };
-  }, [toast]);
+  }, [toast, liveCroppedFaces]);
 
   const handleExport = () => {
     const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
@@ -319,7 +322,7 @@ export default function DashboardPage() {
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
-      setCroppedFaces(faceImages);
+      setLiveCroppedFaces(faceImages);
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
       
@@ -368,8 +371,8 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
                <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
-                {croppedFaces.length > 0 ? (
-                  croppedFaces.map((face, index) => (
+                {facesForDisplay.length > 0 ? (
+                  facesForDisplay.map((face, index) => (
                     <img
                       key={index}
                       src={face}
@@ -530,7 +533,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
-
-    
