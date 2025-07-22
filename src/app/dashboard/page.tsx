@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileDown, Smile, Meh, Users, Loader2 } from 'lucide-react';
+import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
@@ -31,12 +32,22 @@ export default function DashboardPage() {
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
+  
+  const [observerName, setObserverName] = useState('');
+  const [observerSubject, setObserverSubject] = useState('');
 
   const minuteFrameCountRef = useRef(0);
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
+
+  useEffect(() => {
+    const name = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
+    const subject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
+    setObserverName(name);
+    setObserverSubject(subject);
+  }, []);
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -359,6 +370,27 @@ export default function DashboardPage() {
 
         <div className="lg:col-span-1 flex flex-col gap-6">
             <Card>
+              <CardHeader>
+                  <CardTitle className="text-sm font-medium">ข้อมูลการสังเกตการณ์</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                  <div className="flex items-center gap-4">
+                      <User className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">ผู้สังเกตการณ์</span>
+                          <span className="font-semibold">{observerName}</span>
+                      </div>
+                  </div>
+                   <div className="flex items-center gap-4">
+                      <BookOpen className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">วิชา</span>
+                          <span className="font-semibold">{observerSubject}</span>
+                      </div>
+                  </div>
+              </CardContent>
+            </Card>
+            <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">นักเรียนทั้งหมด</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
@@ -461,3 +493,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
