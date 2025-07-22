@@ -223,7 +223,7 @@ export default function DashboardPage() {
   };
 
   const predictWebcam = async () => {
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 4 || !sessionStarted) {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 4 || !sessionStarted || !modelsLoaded) {
       if (videoRef.current && !videoRef.current.paused) {
         animationFrameId.current = requestAnimationFrame(predictWebcam);
       }
