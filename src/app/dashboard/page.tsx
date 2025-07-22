@@ -227,11 +227,23 @@ export default function DashboardPage() {
             maxY = Math.max(maxY, landmark.y * video.videoHeight);
         }
         const padding = 20;
+
+        let x = minX - padding;
+        let y = minY - padding;
+        let width = (maxX - minX) + (padding * 2);
+        let height = (maxY - minY) + (padding * 2);
+
+        // Clamp values to stay within video bounds
+        const clampedX = Math.max(0, x);
+        const clampedY = Math.max(0, y);
+        const clampedWidth = Math.min(width, video.videoWidth - clampedX);
+        const clampedHeight = Math.min(height, video.videoHeight - clampedY);
+
         const box = {
-            x: minX - padding,
-            y: minY - padding,
-            width: (maxX - minX) + (padding * 2),
-            height: (maxY - minY) + (padding * 2)
+            x: clampedX,
+            y: clampedY,
+            width: clampedWidth,
+            height: clampedHeight
         };
         
         const isInterested = await tf.tidy(() => {
