@@ -314,7 +314,7 @@ export default function DashboardPage() {
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
     }
-    predictWebcam();
+    animationFrameId.current = requestAnimationFrame(predictWebcam);
   };
 
   const uninterestedCount = realtimeStudentCount - interestedCount;
@@ -493,5 +493,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
 
     
