@@ -17,6 +17,11 @@ import { collection, addDoc } from "firebase/firestore";
 
 const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
 
+interface FaceData {
+  image: string;
+  interested: boolean;
+}
+
 export default function DashboardPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,18 +45,21 @@ export default function DashboardPage() {
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
 
-  const [liveCroppedFaces, setLiveCroppedFaces] = useState<string[]>([]);
-  const [facesForDisplay, setFacesForDisplay] = useState<string[]>([]);
+  const [liveCroppedFaces, setLiveCroppedFaces] = useState<FaceData[]>([]);
+  const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
   const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
 
   useEffect(() => {
-    const name = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
-    const subject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
-    setObserverName(name);
-    setObserverSubject(subject);
+    // Check if window is defined (we are on the client side)
+    if (typeof window !== 'undefined') {
+        const name = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
+        const subject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
+        setObserverName(name);
+        setObserverSubject(subject);
+    }
   }, []);
 
   useEffect(() => {
@@ -144,25 +152,27 @@ export default function DashboardPage() {
           setHourlyData(prevData => [newHourlyEntry, ...prevData.slice(0, 3)]);
         }
 
-        const sessionId = localStorage.getItem('currentSessionId');
-        if (sessionId) {
-          try {
-            const timelineRef = collection(db, "sessions", sessionId, "timeline");
-            await addDoc(timelineRef, {
-              timestamp: new Date(),
-              personCount: avgPersonCount,
-              interestedCount: avgInterested,
-              uninterestedCount: avgUninterested
-            });
-            console.log(`Data saved to Firestore for session ${sessionId} at ${new Date().toISOString()}`);
-          } catch (error) {
-            console.error("Failed to save timeline data:", error);
-            toast({
-                variant: 'destructive',
-                title: 'เกิดข้อผิดพลาดในการบันทึก',
-                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
-            });
-          }
+        if (typeof window !== 'undefined') {
+            const sessionId = localStorage.getItem('currentSessionId');
+            if (sessionId) {
+              try {
+                const timelineRef = collection(db, "sessions", sessionId, "timeline");
+                await addDoc(timelineRef, {
+                  timestamp: new Date(),
+                  personCount: avgPersonCount,
+                  interestedCount: avgInterested,
+                  uninterestedCount: avgUninterested
+                });
+                console.log(`Data saved to Firestore for session ${sessionId} at ${new Date().toISOString()}`);
+              } catch (error) {
+                console.error("Failed to save timeline data:", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'เกิดข้อผิดพลาดในการบันทึก',
+                    description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
+                });
+              }
+            }
         }
       }
     }, 10000); // Save every 10 seconds for easier testing
@@ -173,6 +183,7 @@ export default function DashboardPage() {
   }, [toast, liveCroppedFaces]);
 
   const handleExport = () => {
+    if (typeof window === 'undefined') return;
     const observerName = localStorage.getItem('observerName') || 'ไม่มีข้อมูล';
     const observerSubject = localStorage.getItem('observerSubject') || 'ไม่มีข้อมูล';
     const observerDate = localStorage.getItem('observerDate') || 'ไม่มีข้อมูล';
@@ -236,7 +247,7 @@ export default function DashboardPage() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       let currentInterested = 0;
-      const faceImages: string[] = [];
+      const faceImages: FaceData[] = [];
 
 
       for (let i = 0; i < results.faceLandmarks.length; i++) {
@@ -269,17 +280,6 @@ export default function DashboardPage() {
             height: clampedHeight
         };
         
-        // Add cropped face to display array
-        if (tempCanvasRef.current && box.width > 0 && box.height > 0) {
-            const tempCtx = tempCanvasRef.current.getContext('2d');
-            if (tempCtx) {
-                tempCanvasRef.current.width = box.width;
-                tempCanvasRef.current.height = box.height;
-                tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-                faceImages.push(tempCanvasRef.current.toDataURL());
-            }
-        }
-        
         const isInterested = await tf.tidy(() => {
           const faceImage = tf.browser.fromPixels(video, 3)
             .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
@@ -298,6 +298,20 @@ export default function DashboardPage() {
 
         if (isInterested) {
           currentInterested++;
+        }
+        
+        // Add cropped face to display array
+        if (tempCanvasRef.current && box.width > 0 && box.height > 0) {
+            const tempCtx = tempCanvasRef.current.getContext('2d');
+            if (tempCtx) {
+                tempCanvasRef.current.width = box.width;
+                tempCanvasRef.current.height = box.height;
+                tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                faceImages.push({
+                  image: tempCanvasRef.current.toDataURL(),
+                  interested: isInterested,
+                });
+            }
         }
 
         const canvasX = box.x * (canvas.width / video.videoWidth);
@@ -372,12 +386,14 @@ export default function DashboardPage() {
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
                <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
                 {facesForDisplay.length > 0 ? (
-                  facesForDisplay.map((face, index) => (
+                  facesForDisplay.map((faceData, index) => (
                     <img
                       key={index}
-                      src={face}
+                      src={faceData.image}
                       alt={`Cropped face ${index + 1}`}
-                      className="inline-block h-full w-auto rounded-md mr-2 border-2 border-primary"
+                      className={`inline-block h-full w-auto rounded-md mr-2 border-4 ${
+                        faceData.interested ? 'border-green-400' : 'border-red-400'
+                      }`}
                     />
                   ))
                 ) : (
