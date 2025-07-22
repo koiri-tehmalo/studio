@@ -71,7 +71,7 @@ export default function DashboardPage() {
         toast({
           variant: 'destructive',
           title: 'ไม่สามารถโหลดโมเดล AI',
-          description: 'โปรดรีเฟรชหน้าหรือลองอีกครั้งในภายหลัง',
+          description: 'โปรดตรวจสอบว่าคุณได้ย้ายโฟลเดอร์ model ไปไว้ใน public แล้ว และรีเฟรชหน้าเว็บ',
         });
       }
     };
