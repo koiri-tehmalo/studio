@@ -40,6 +40,10 @@ export default function DashboardPage() {
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
 
+  const [croppedFaces, setCroppedFaces] = useState<string[]>([]);
+  const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
 
   useEffect(() => {
@@ -56,6 +60,9 @@ export default function DashboardPage() {
   }, [stream]);
   
   useEffect(() => {
+    // Create a temporary canvas for cropping faces
+    tempCanvasRef.current = document.createElement('canvas');
+
     const loadModels = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
@@ -226,6 +233,8 @@ export default function DashboardPage() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       let currentInterested = 0;
+      const faceImages: string[] = [];
+
 
       for (let i = 0; i < results.faceLandmarks.length; i++) {
         const landmarks = results.faceLandmarks[i];
@@ -256,6 +265,17 @@ export default function DashboardPage() {
             width: clampedWidth,
             height: clampedHeight
         };
+        
+        // Add cropped face to display array
+        if (tempCanvasRef.current && box.width > 0 && box.height > 0) {
+            const tempCtx = tempCanvasRef.current.getContext('2d');
+            if (tempCtx) {
+                tempCanvasRef.current.width = box.width;
+                tempCanvasRef.current.height = box.height;
+                tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                faceImages.push(tempCanvasRef.current.toDataURL());
+            }
+        }
         
         const isInterested = await tf.tidy(() => {
           const faceImage = tf.browser.fromPixels(video, 3)
@@ -299,6 +319,7 @@ export default function DashboardPage() {
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
+      setCroppedFaces(faceImages);
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
       
@@ -346,6 +367,22 @@ export default function DashboardPage() {
               <CardDescription>ตรวจจับใบหน้าและวิเคราะห์อารมณ์แบบเรียลไทม์</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
+               <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
+                {croppedFaces.length > 0 ? (
+                  croppedFaces.map((face, index) => (
+                    <img
+                      key={index}
+                      src={face}
+                      alt={`Cropped face ${index + 1}`}
+                      className="inline-block h-full w-auto rounded-md mr-2 border-2 border-primary"
+                    />
+                  ))
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                    รอการตรวจจับใบหน้า...
+                  </div>
+                )}
+              </div>
               <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
                  <video ref={videoRef} onPlay={handleVideoPlay} className="w-full h-full object-cover" autoPlay muted playsInline />
                  <canvas ref={canvasRef} className="absolute top-0 left-0" />
