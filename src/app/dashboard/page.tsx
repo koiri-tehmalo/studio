@@ -6,13 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen, Clock, History, BarChart2 } from 'lucide-react';
+import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen, Clock, History } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useCamera } from '@/providers/camera-provider';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth } from '@/providers/auth-provider';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +28,7 @@ interface HistoricalData {
     timestamp: string;
     personCount: number;
     interested: string;
-uninterested: string;
+    uninterested: string;
 }
 
 export default function DashboardPage() {
@@ -126,7 +126,7 @@ export default function DashboardPage() {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast]);
+  }, [toast, faceLandmarker, cnnModel]);
 
   useEffect(() => {
     if (!sessionStarted || !currentSessionId) return;

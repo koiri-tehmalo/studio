@@ -36,9 +36,11 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         return;
     }
     try {
+      // We need to get permission first to be able to enumerate devices with labels
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       
+      // Now we can get the list of all devices
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = allDevices.filter(device => device.kind === 'videoinput');
       setDevices(videoDevices);
@@ -46,14 +48,17 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       const savedDeviceId = localStorage.getItem('selectedCameraId');
       
       let finalDeviceId;
+      // Check if the saved device is still available
       if (savedDeviceId && videoDevices.some(d => d.deviceId === savedDeviceId)) {
         finalDeviceId = savedDeviceId;
       } else if (videoDevices.length > 0) {
+        // Otherwise, use the first available video device
         finalDeviceId = videoDevices[0].deviceId;
         localStorage.setItem('selectedCameraId', finalDeviceId);
       }
       setSelectedDeviceId(finalDeviceId);
       
+      // Stop the temporary stream used for getting permissions
       tempStream.getTracks().forEach(track => track.stop());
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -78,49 +83,53 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
+    // This effect handles the creation and cleanup of the camera stream
     if (selectedDeviceId && hasCameraPermission) {
-      let currentStream: MediaStream | null = null;
+      let isCancelled = false;
       
       const getNewStream = async () => {
+        // Stop any previous stream before getting a new one
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
         try {
-          // Stop any previous stream before getting a new one
-          if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-          }
-
           const newStream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: selectedDeviceId } }
           });
-          currentStream = newStream;
-          setStream(newStream);
+          if (!isCancelled) {
+            setStream(newStream);
+          }
         } catch (error) {
           console.error('Failed to get new stream:', error);
-          toast({
-            variant: 'destructive',
-            title: 'ไม่สามารถเปิดกล้องได้',
-            description: 'ไม่สามารถเปิดใช้งานกล้องที่เลือกได้ โปรดลองอีกครั้ง',
-          });
-          setStream(null);
+           if (!isCancelled) {
+              toast({
+                variant: 'destructive',
+                title: 'ไม่สามารถเปิดกล้องได้',
+                description: 'ไม่สามารถเปิดใช้งานกล้องที่เลือกได้ โปรดลองอีกครั้ง',
+              });
+              setStream(null);
+           }
         }
       };
       
       getNewStream();
 
+      // Cleanup function to stop the stream when the component unmounts or device changes
       return () => {
-        // Cleanup function to stop the stream when the component unmounts or device changes
-        if (currentStream) {
-            currentStream.getTracks().forEach(track => track.stop());
+        isCancelled = true;
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
         }
       }
     } else {
-        // If no device is selected or no permission, ensure stream is null
+        // If no device is selected or no permission, ensure stream is null and stopped
         if(stream) {
             stream.getTracks().forEach(track => track.stop());
             setStream(null);
         }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission, toast]);
+  }, [selectedDeviceId, hasCameraPermission]);
 
 
   const value = {
