@@ -48,12 +48,15 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
 
+    let landmarker: FaceLandmarker | undefined;
+    let model: tf.LayersModel | undefined;
+
     const loadModels = async () => {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
         );
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
+        landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
             delegate: "GPU",
@@ -65,7 +68,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         faceLandmarkerRef.current = landmarker;
 
         await tf.setBackend('webgl');
-        const model = await tf.loadLayersModel('/model/model.json');
+        model = await tf.loadLayersModel('/model/model.json');
         cnnModelRef.current = model;
 
         setModelsLoaded(true);
@@ -81,8 +84,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
-      faceLandmarkerRef.current?.close();
-      cnnModelRef.current?.dispose();
+      landmarker?.close();
+      model?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
