@@ -24,8 +24,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
   
-  const faceLandmarkerRef = useRef<FaceLandmarker | undefined>();
-  const cnnModelRef = useRef<tf.LayersModel | undefined>();
+  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
+  const cnnModelRef = useRef<tf.LayersModel | null>(null);
 
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
@@ -48,8 +48,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
 
-    let landmarker: FaceLandmarker | undefined;
-    let model: tf.LayersModel | undefined;
+    let landmarker: FaceLandmarker | null = null;
+    let model: tf.LayersModel | null = null;
 
     const loadModels = async () => {
       console.log("🧠 loadModels started");
@@ -85,6 +85,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
+      // Cleanup using local variables to avoid ref issues on unmount
       landmarker?.close();
       model?.dispose();
       if (animationFrameId.current) {
@@ -99,6 +100,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
+    // Strict check to ensure everything is ready before proceeding
     if (!modelsLoaded || !faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 3) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
@@ -281,7 +283,10 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
       videoRef.current.addEventListener('loadeddata', () => {
-        videoRef.current?.play().catch(e => console.error("Video play failed:", e));
+        // Check if video is not already playing to avoid interruption errors
+        if (videoRef.current?.paused) {
+             videoRef.current?.play().catch(e => console.error("Video play failed:", e));
+        }
       });
     }
   }, [stream]);
