@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
@@ -24,8 +24,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
   
-  const faceLandmarkerRef = useRef<FaceLandmarker | undefined>();
-  const cnnModelRef = useRef<tf.LayersModel | undefined>();
+  const faceLandmarkerRef = useRef<FaceLandmarker>();
+  const cnnModelRef = useRef<tf.LayersModel>();
 
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
@@ -85,16 +85,15 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
-      // Cleanup using local variables to avoid ref issues on unmount
       landmarker?.close();
       model?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast]);
+  }, []);
 
-  const predictWebcam = useCallback(async () => {
+  const predictWebcam = async () => {
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
     const video = videoRef.current;
@@ -219,7 +218,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [modelsLoaded]);
+  };
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
@@ -274,18 +273,17 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     };
   }, [sessionInfo.id, toast, liveCroppedFaces]);
 
-  const handleVideoPlay = useCallback(() => {
+  const handleVideoPlay = () => {
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
     }
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [predictWebcam]);
+  };
 
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
       videoRef.current.addEventListener('loadeddata', () => {
-        // Check if video is not already playing to avoid interruption errors
         if (videoRef.current?.paused) {
              videoRef.current?.play().catch(e => console.error("Video play failed:", e));
         }
