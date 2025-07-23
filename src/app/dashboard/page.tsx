@@ -106,6 +106,7 @@ function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
     loadModels();
     
     return () => {
+      // Use the variables from the outer scope for cleanup
       loadedFaceLandmarker?.close();
       loadedCnnModel?.dispose();
       if (animationFrameId.current) {
@@ -181,12 +182,12 @@ function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
     }
     
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
-    if (video.readyState < 3) { // Check if video has enough data to play
+    if (video.readyState < 3) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
+
+    const canvas = canvasRef.current;
     
     const results = faceLandmarker.detectForVideo(video, performance.now());
 
@@ -224,6 +225,7 @@ function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
         const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
         
         const isInterested = await tf.tidy(() => {
+          if (cnnModel.isDisposed) return false;
           const faceImage = tf.browser.fromPixels(video)
             .slice([box.y, box.x, 0], [box.height, box.width, 3])
             .resizeBilinear([48, 48])
