@@ -48,16 +48,12 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
 
-    let landmarker: FaceLandmarker | undefined;
-    let model: tf.LayersModel | undefined;
-
     const loadModels = async () => {
-      console.log("🧠 loadModels started");
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
         );
-        landmarker = await FaceLandmarker.createFromOptions(vision, {
+        faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
             delegate: "GPU",
@@ -66,11 +62,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
           runningMode: "VIDEO",
           numFaces: 20,
         });
-        faceLandmarkerRef.current = landmarker;
 
         await tf.setBackend('webgl');
-        model = await tf.loadLayersModel('/model/model.json');
-        cnnModelRef.current = model;
+        cnnModelRef.current = await tf.loadLayersModel('/model/model.json');
 
         setModelsLoaded(true);
       } catch (error) {
@@ -85,13 +79,13 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
-      landmarker?.close();
-      model?.dispose();
+      faceLandmarkerRef.current?.close();
+      cnnModelRef.current?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, []);
+  }, [toast]);
 
   const predictWebcam = async () => {
     const faceLandmarker = faceLandmarkerRef.current;
