@@ -36,7 +36,6 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         return;
     }
     try {
-      // Request permission and get a temporary stream to enumerate devices
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       
@@ -54,25 +53,25 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       }
        
        if (finalDeviceId) {
-          // This will trigger the stream update effect
           setSelectedDeviceId(finalDeviceId);
           localStorage.setItem('selectedCameraId', finalDeviceId);
+       } else {
+        setIsLoading(false);
        }
       
-      // Stop the temporary stream, the main stream will be created in the other effect
       tempStream.getTracks().forEach(track => track.stop());
 
     } catch (error) {
       console.error('Error accessing camera:', error);
       setHasCameraPermission(false);
+      setDevices([]);
+      setStream(null);
+      setIsLoading(false);
       toast({
         variant: 'destructive',
         title: 'การเข้าถึงกล้องถูกปฏิเสธ',
         description: 'โปรดเปิดใช้งานการเข้าถึงกล้องในการตั้งค่าเบราว์เซอร์ของคุณ',
       });
-    } finally {
-        // Let the stream effect handle the loading state
-        // setIsLoading(false); 
     }
   }, [toast]);
 
@@ -82,18 +81,19 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateSelectedDevice = (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
-    localStorage.setItem('selectedCameraId', deviceId);
+    if (deviceId !== selectedDeviceId) {
+        setSelectedDeviceId(deviceId);
+        localStorage.setItem('selectedCameraId', deviceId);
+    }
   }
 
   useEffect(() => {
-    // Stop any existing stream before creating a new one
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
-      setStream(null);
     }
 
     if (!selectedDeviceId || hasCameraPermission !== true) {
+      setStream(null);
       setIsLoading(false);
       return;
     };
@@ -132,7 +132,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission, toast]);
+  }, [selectedDeviceId, hasCameraPermission]);
 
 
   const value = {
