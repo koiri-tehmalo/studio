@@ -24,8 +24,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
   
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
-  const cnnModelRef = useRef<tf.LayersModel | null>(null);
+  const faceLandmarkerRef = useRef<FaceLandmarker | undefined>();
+  const cnnModelRef = useRef<tf.LayersModel | undefined>();
 
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
@@ -48,8 +48,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
 
-    let landmarker: FaceLandmarker | null = null;
-    let model: tf.LayersModel | null = null;
+    let landmarker: FaceLandmarker | undefined;
+    let model: tf.LayersModel | undefined;
 
     const loadModels = async () => {
       console.log("🧠 loadModels started");
