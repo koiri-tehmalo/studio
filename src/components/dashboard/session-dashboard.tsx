@@ -24,8 +24,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
   
-  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | undefined>(undefined);
-  const [cnnModel, setCnnModel] = useState<tf.LayersModel | undefined>(undefined);
+  const faceLandmarkerRef = useRef<FaceLandmarker | undefined>();
+  const cnnModelRef = useRef<tf.LayersModel | undefined>();
+
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [historicalData, setHistoricalData] = useState<HistoricalData[]>([]);
 
@@ -46,8 +47,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
-    let loadedFaceLandmarker: FaceLandmarker | undefined;
-    let loadedCnnModel: tf.LayersModel | undefined;
 
     const loadModels = async () => {
       try {
@@ -63,13 +62,11 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
           runningMode: "VIDEO",
           numFaces: 20,
         });
-        loadedFaceLandmarker = landmarker;
-        setFaceLandmarker(landmarker);
+        faceLandmarkerRef.current = landmarker;
 
         await tf.setBackend('webgl');
         const model = await tf.loadLayersModel('/model/model.json');
-        loadedCnnModel = model;
-        setCnnModel(model);
+        cnnModelRef.current = model;
 
         setModelsLoaded(true);
       } catch (error) {
@@ -84,8 +81,8 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
-      loadedFaceLandmarker?.close();
-      loadedCnnModel?.dispose();
+      faceLandmarkerRef.current?.close();
+      cnnModelRef.current?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
@@ -101,7 +98,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
-      setFacesForDisplay([...liveCroppedFaces]);
+      setFacesForDisplay(liveCroppedFaces);
       
       const frameCount = minuteFrameCountRef.current;
       const totalStudents = minuteTotalStudentCountRef.current;
@@ -153,123 +150,121 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   }, [sessionInfo.id, toast, liveCroppedFaces]);
 
   const predictWebcam = useCallback(async () => {
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
-      return;
-    }
-    
+    const faceLandmarker = faceLandmarkerRef.current;
+    const cnnModel = cnnModelRef.current;
     const video = videoRef.current;
-    if (video.readyState < 3) {
+    const canvas = canvasRef.current;
+
+    if (!faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 3) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
 
-    const canvas = canvasRef.current;
-    
     const results = faceLandmarker.detectForVideo(video, performance.now());
-
     const ctx = canvas.getContext('2d');
-    if (ctx && results.faceLandmarks) {
-      canvas.width = video.clientWidth;
-      canvas.height = video.clientHeight;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      let currentInterested = 0;
-      const faceImages: FaceData[] = [];
 
-      for (const landmarks of results.faceLandmarks) {
-        let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
-        for (const landmark of landmarks) {
-            minX = Math.min(minX, landmark.x * video.videoWidth);
-            maxX = Math.max(maxX, landmark.x * video.videoWidth);
-            minY = Math.min(minY, landmark.y * video.videoHeight);
-            maxY = Math.max(maxY, landmark.y * video.videoHeight);
-        }
-        const padding = 20;
+    if (ctx && results.faceLandmarks && video.clientWidth > 0 && video.clientHeight > 0) {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const x = minX - padding;
-        const y = minY - padding;
-        const width = (maxX - minX) + (padding * 2);
-        const height = (maxY - minY) + (padding * 2);
+        let currentInterested = 0;
+        const faceImages: FaceData[] = [];
 
-        const clampedX = Math.max(0, Math.round(x));
-        const clampedY = Math.max(0, Math.round(y));
-        const clampedWidth = Math.min(Math.round(width), video.videoWidth - clampedX);
-        const clampedHeight = Math.min(Math.round(height), video.videoHeight - clampedY);
-
-        if (clampedWidth <= 0 || clampedHeight <= 0) continue;
-
-        const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
-        
-        const isInterested = await tf.tidy(async () => {
-            if (!cnnModel || cnnModel.isDisposed) return false;
-            
-            const faceImageTensor = tf.browser.fromPixels(video)
-                .slice([box.y, box.x, 0], [box.height, box.width, 3])
-                .resizeBilinear([48, 48])
-                .mean(2)
-                .toFloat()
-                .div(tf.scalar(255.0))
-                .expandDims(0)
-                .expandDims(-1);
-            
-            const prediction = cnnModel.predict(faceImageTensor) as tf.Tensor;
-            const predictionData = await prediction.data();
-            const [uninterestedScore, interestedScore] = predictionData;
-            
-            tf.dispose([faceImageTensor, prediction]);
-
-            return interestedScore > uninterestedScore;
-        });
-
-        if (isInterested) currentInterested++;
-        
-        if (tempCanvasRef.current) {
-            const tempCtx = tempCanvasRef.current.getContext('2d');
-            if (tempCtx) {
-                tempCanvasRef.current.width = box.width;
-                tempCanvasRef.current.height = box.height;
-                tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-                faceImages.push({
-                  image: tempCanvasRef.current.toDataURL(),
-                  interested: isInterested,
-                });
+        for (const landmarks of results.faceLandmarks) {
+            let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
+            for (const landmark of landmarks) {
+                minX = Math.min(minX, landmark.x * video.videoWidth);
+                maxX = Math.max(maxX, landmark.x * video.videoWidth);
+                minY = Math.min(minY, landmark.y * video.videoHeight);
+                maxY = Math.max(maxY, landmark.y * video.videoHeight);
             }
+            const padding = 20;
+
+            const x = minX - padding;
+            const y = minY - padding;
+            const width = (maxX - minX) + (padding * 2);
+            const height = (maxY - minY) + (padding * 2);
+
+            const clampedX = Math.max(0, Math.round(x));
+            const clampedY = Math.max(0, Math.round(y));
+            const clampedWidth = Math.min(Math.round(width), video.videoWidth - clampedX);
+            const clampedHeight = Math.min(Math.round(height), video.videoHeight - clampedY);
+
+            if (clampedWidth <= 0 || clampedHeight <= 0) continue;
+
+            const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
+
+            const isInterested = await tf.tidy(async () => {
+                if (!cnnModel || cnnModel.isDisposed) return false;
+                
+                const faceImageTensor = tf.browser.fromPixels(video)
+                    .slice([box.y, box.x, 0], [box.height, box.width, 3])
+                    .resizeBilinear([48, 48])
+                    .mean(2)
+                    .toFloat()
+                    .div(tf.scalar(255.0))
+                    .expandDims(0)
+                    .expandDims(-1);
+                
+                const prediction = cnnModel.predict(faceImageTensor) as tf.Tensor;
+                const predictionData = await prediction.data();
+                const [uninterestedScore, interestedScore] = predictionData;
+                
+                tf.dispose([faceImageTensor, prediction]);
+
+                return interestedScore > uninterestedScore;
+            });
+
+            if (isInterested) currentInterested++;
+            
+            if (tempCanvasRef.current) {
+                const tempCtx = tempCanvasRef.current.getContext('2d');
+                if (tempCtx) {
+                    tempCanvasRef.current.width = box.width;
+                    tempCanvasRef.current.height = box.height;
+                    tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                    faceImages.push({
+                      image: tempCanvasRef.current.toDataURL(),
+                      interested: isInterested,
+                    });
+                }
+            }
+
+            const canvasX = box.x * (canvas.width / video.videoWidth);
+            const canvasY = box.y * (canvas.height / video.videoHeight);
+            const canvasWidth = box.width * (canvas.width / video.videoWidth);
+            const canvasHeight = box.height * (canvas.height / video.videoHeight);
+            
+            const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
+            const color = isInterested ? '#4ade80' : '#f87171';
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+            
+            ctx.fillStyle = color;
+            const textBackgroundHeight = 24;
+            ctx.font = `bold 16px 'Poppins'`;
+            const textWidth = ctx.measureText(thaiText).width;
+            
+            ctx.fillRect(canvasX, canvasY - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
+            
+            ctx.fillStyle = '#fff';
+            ctx.fillText(thaiText, canvasX + 6, canvasY - 6);
         }
-
-        const canvasX = box.x * (canvas.width / video.videoWidth);
-        const canvasY = box.y * (canvas.height / video.videoHeight);
-        const canvasWidth = box.width * (canvas.width / video.videoWidth);
-        const canvasHeight = box.height * (canvas.height / video.videoHeight);
         
-        const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
-        const color = isInterested ? '#4ade80' : '#f87171';
-
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
-        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+        setLiveCroppedFaces(faceImages);
+        setRealtimeStudentCount(results.faceLandmarks.length);
+        setInterestedCount(currentInterested);
         
-        ctx.fillStyle = color;
-        const textBackgroundHeight = 24;
-        ctx.font = `bold 16px 'Poppins'`;
-        const textWidth = ctx.measureText(thaiText).width;
-        
-        ctx.fillRect(canvasX - 1, canvasY - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
-        
-        ctx.fillStyle = '#fff';
-        ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
-      }
-      setLiveCroppedFaces(faceImages);
-      setRealtimeStudentCount(results.faceLandmarks.length);
-      setInterestedCount(currentInterested);
-      
-      minuteFrameCountRef.current++;
-      minuteTotalStudentCountRef.current += results.faceLandmarks.length;
-      minuteTotalInterestedCountRef.current += currentInterested;
+        minuteFrameCountRef.current++;
+        minuteTotalStudentCountRef.current += results.faceLandmarks.length;
+        minuteTotalInterestedCountRef.current += currentInterested;
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [faceLandmarker, cnnModel]);
+  }, [toast]);
 
   const handleVideoPlay = useCallback(() => {
     if (animationFrameId.current) {
@@ -449,3 +444,5 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     </div>
   );
 }
+
+    
