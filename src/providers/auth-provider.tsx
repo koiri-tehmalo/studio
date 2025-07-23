@@ -27,46 +27,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setIsLoading(true);
+      let finalUser: User | null = null;
+      let finalUserName: string | null = null;
+      let finalUserRole: 'admin' | 'user' | null = null;
+      
       if (firebaseUser) {
-        setUser(firebaseUser);
-        // Fetch user role from Firestore
+        finalUser = firebaseUser;
         const userDocRef = doc(db, 'users', firebaseUser.uid);
         const userDoc = await getDoc(userDocRef);
         if (userDoc.exists()) {
           const userData = userDoc.data();
-          setUserRole(userData.role);
-          setUserName(userData.name);
-        } else {
-            // Handle case where user exists in Auth but not in Firestore
-            setUserRole(null);
-            setUserName(null);
+          finalUserRole = userData.role;
+          finalUserName = userData.name;
         }
-      } else {
-        setUser(null);
-        setUserRole(null);
-        setUserName(null);
       }
+      
+      setUser(finalUser);
+      setUserName(finalUserName);
+      setUserRole(finalUserRole);
       setIsLoading(false);
+
+      // --- Routing logic is now here ---
+      const isAuthPage = pathname === '/' || pathname === '/register';
+      if (finalUser && isAuthPage) {
+        router.push('/dashboard');
+      }
+      if (!finalUser && !isAuthPage) {
+        router.push('/');
+      }
     });
 
     return () => unsubscribe();
-  }, []);
-
-   useEffect(() => {
-    if (!isLoading) {
-      const isAuthPage = pathname === '/' || pathname === '/register';
-      if (!user && !isAuthPage) {
-        router.push('/');
-      }
-      if (user && isAuthPage) {
-        router.push('/dashboard');
-      }
-    }
-  }, [user, isLoading, pathname, router]);
+  }, [pathname, router]);
 
   const logout = async () => {
     await signOut(auth);
+    router.push('/');
   };
 
   const value = {
@@ -77,8 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
   };
 
-  const isAuthPage = pathname === '/' || pathname === '/register';
-  if (isLoading && !isAuthPage) {
+  // While the initial user state is loading, show a loader for protected pages
+  if (isLoading && pathname !== '/' && pathname !== '/register') {
      return (
         <div className="flex justify-center items-center h-screen bg-background">
             <Loader2 className="h-16 w-16 animate-spin text-primary" />
