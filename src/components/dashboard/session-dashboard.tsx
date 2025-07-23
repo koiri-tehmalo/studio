@@ -155,7 +155,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 3) {
+    if (!modelsLoaded || !faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 3) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
@@ -264,7 +264,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [toast]);
+  }, [toast, modelsLoaded]);
 
   const handleVideoPlay = useCallback(() => {
     if (animationFrameId.current) {
@@ -444,5 +444,3 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     </div>
   );
 }
-
-    
