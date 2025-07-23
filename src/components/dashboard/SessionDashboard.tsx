@@ -107,9 +107,15 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const results = faceLandmarker.detectForVideo(video, performance.now());
     const ctx = canvas.getContext('2d');
 
-    if (ctx && results.faceLandmarks && video.clientWidth > 0 && video.clientHeight > 0) {
+    if (ctx && results.faceLandmarks && video.videoWidth > 0 && video.videoHeight > 0) {
+        // Match canvas dimensions to video display dimensions
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
+
+        // Calculate scaling factors
+        const scaleX = canvas.width / video.videoWidth;
+        const scaleY = canvas.height / video.videoHeight;
+
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         let currentInterested = 0;
@@ -175,10 +181,11 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                 }
             }
 
-            const canvasX = box.x * (canvas.width / video.videoWidth);
-            const canvasY = box.y * (canvas.height / video.videoHeight);
-            const canvasWidth = box.width * (canvas.width / video.videoWidth);
-            const canvasHeight = box.height * (canvas.height / video.videoHeight);
+            // Apply scaling to draw on the canvas correctly
+            const canvasX = box.x * scaleX;
+            const canvasY = box.y * scaleY;
+            const canvasWidth = box.width * scaleX;
+            const canvasHeight = box.height * scaleY;
             
             const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
             const color = isInterested ? '#4ade80' : '#f87171';
@@ -273,7 +280,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   useEffect(() => {
     if (stream && videoRef.current) {
       videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Video play failed:", e));
+      videoRef.current.addEventListener('loadeddata', () => {
+        videoRef.current?.play().catch(e => console.error("Video play failed:", e));
+      });
     }
   }, [stream]);
 

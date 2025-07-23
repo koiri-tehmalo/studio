@@ -36,6 +36,7 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         return;
     }
     try {
+      // Request permission and get a temporary stream to enumerate devices
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       
@@ -53,11 +54,14 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       }
        
        if (finalDeviceId) {
+          // This will trigger the stream update effect
           setSelectedDeviceId(finalDeviceId);
           localStorage.setItem('selectedCameraId', finalDeviceId);
        }
       
+      // Stop the temporary stream, the main stream will be created in the other effect
       tempStream.getTracks().forEach(track => track.stop());
+
     } catch (error) {
       console.error('Error accessing camera:', error);
       setHasCameraPermission(false);
@@ -67,13 +71,15 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         description: 'โปรดเปิดใช้งานการเข้าถึงกล้องในการตั้งค่าเบราว์เซอร์ของคุณ',
       });
     } finally {
-        setIsLoading(false); 
+        // Let the stream effect handle the loading state
+        // setIsLoading(false); 
     }
   }, [toast]);
 
   useEffect(() => {
     getDevicesAndPermissions();
-  }, [getDevicesAndPermissions]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateSelectedDevice = (deviceId: string) => {
     setSelectedDeviceId(deviceId);
@@ -81,30 +87,26 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!selectedDeviceId || !hasCameraPermission) {
-      // Stop any existing stream if permissions are lost or device is deselected
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        setStream(null);
-      }
+    // Stop any existing stream before creating a new one
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+
+    if (!selectedDeviceId || hasCameraPermission !== true) {
+      setIsLoading(false);
       return;
     };
 
     let isCancelled = false;
     setIsLoading(true);
     
-    // Stop previous stream before getting a new one
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-
     navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: selectedDeviceId } }
     }).then(newStream => {
       if (!isCancelled) {
         setStream(newStream);
       } else {
-        // Cleanup if component unmounted while we were getting the stream
         newStream.getTracks().forEach(track => track.stop());
       }
     }).catch(error => {
@@ -125,15 +127,12 @@ export function CameraProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isCancelled = true;
-      // This cleanup runs when the component unmounts or dependencies change.
-      // The stream is now stopped at the beginning of the effect, so this might be redundant,
-      // but it's good practice for safety.
       if (stream) {
           stream.getTracks().forEach(track => track.stop());
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission]);
+  }, [selectedDeviceId, hasCameraPermission, toast]);
 
 
   const value = {
