@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -31,7 +31,17 @@ interface HistoricalData {
     uninterested: string;
 }
 
-export default function DashboardPage() {
+interface SessionInfo {
+    name: string;
+    subject: string;
+    date: string;
+    id: string;
+}
+
+// =================================================================
+// Component for the main dashboard view after a session has started
+// =================================================================
+function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
@@ -46,10 +56,6 @@ export default function DashboardPage() {
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
   
-  const [observerName, setObserverName] = useState('');
-  const [observerSubject, setObserverSubject] = useState('');
-  const [observerDate, setObserverDate] = useState('');
-
   const minuteFrameCountRef = useRef(0);
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
@@ -57,32 +63,8 @@ export default function DashboardPage() {
   const [liveCroppedFaces, setLiveCroppedFaces] = useState<FaceData[]>([]);
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
   const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  const [sessionStarted, setSessionStarted] = useState(false);
-  const [isStartingSession, setIsStartingSession] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-
+  
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
-  const { user, userName } = useAuth();
-
-   useEffect(() => {
-     if (userName) {
-       const storedName = localStorage.getItem('observerName');
-       const storedSubject = localStorage.getItem('observerSubject');
-       
-       setObserverName(storedName || userName);
-       if (storedSubject) {
-         setObserverSubject(storedSubject);
-       }
-     }
-   }, [userName]);
-
-  useEffect(() => {
-    if (stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Video play failed:", e));
-    }
-  }, [stream]);
   
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
@@ -133,8 +115,13 @@ export default function DashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (!sessionStarted || !currentSessionId) return;
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(e => console.error("Video play failed:", e));
+    }
+  }, [stream]);
 
+  useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
       setFacesForDisplay([...liveCroppedFaces]);
       
@@ -164,7 +151,7 @@ export default function DashboardPage() {
         setHistoricalData(prevData => [newDisplayEntry, ...prevData]);
 
         try {
-            const timelineRef = collection(db, "sessions", currentSessionId, "timeline");
+            const timelineRef = collection(db, "sessions", sessionInfo.id, "timeline");
             await addDoc(timelineRef, {
                 timestamp: serverTimestamp(),
                 personCount: avgPersonCount,
@@ -185,61 +172,11 @@ export default function DashboardPage() {
     return () => {
       clearInterval(dataCaptureInterval);
     };
-  }, [sessionStarted, currentSessionId, toast, liveCroppedFaces]);
+  }, [sessionInfo.id, toast, liveCroppedFaces]);
 
-  const handleStartSession = async () => {
-    if (!observerName || !observerSubject || !observerDate) {
-        toast({
-            variant: 'destructive',
-            title: 'ข้อมูลไม่ครบถ้วน',
-            description: 'กรุณากรอกข้อมูลการสังเกตการณ์ให้ครบถ้วน',
-        });
-        return;
-    }
-    if (!user) {
-         toast({
-            variant: 'destructive',
-            title: 'ไม่พบผู้ใช้งาน',
-            description: 'กรุณาเข้าสู่ระบบอีกครั้ง',
-        });
-        return;
-    }
-    
-    setIsStartingSession(true);
-    try {
-      localStorage.setItem('observerName', observerName);
-      localStorage.setItem('observerSubject', observerSubject);
-      
-      const sessionRef = await addDoc(collection(db, "sessions"), {
-        observerName: observerName,
-        subject: observerSubject,
-        date: observerDate,
-        createdAt: serverTimestamp(),
-        userId: user.uid,
-      });
-      setCurrentSessionId(sessionRef.id);
-      setSessionStarted(true);
-      toast({
-        title: 'เริ่มเซสชันสำเร็จ',
-        description: `เริ่มการสังเกตการณ์วิชา ${observerSubject}`,
-      });
-    } catch (error) {
-       console.error("Error starting session:", error);
-       toast({
-            variant: 'destructive',
-            title: 'เกิดข้อผิดพลาด',
-            description: 'ไม่สามารถเริ่มเซสชันได้ โปรดลองอีกครั้ง',
-       });
-    } finally {
-        setIsStartingSession(false);
-    }
-  };
-
-  const predictWebcam = async () => {
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended || !sessionStarted) {
-      if (animationFrameId.current) {
-         cancelAnimationFrame(animationFrameId.current);
-      }
+  const predictWebcam = useCallback(async () => {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended) {
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
     
@@ -349,14 +286,14 @@ export default function DashboardPage() {
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  };
+  }, [faceLandmarker, cnnModel]);
 
-  const handleVideoPlay = () => {
+  const handleVideoPlay = useCallback(() => {
     if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
     }
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  };
+  }, [predictWebcam]);
 
   const uninterestedCount = realtimeStudentCount - interestedCount;
   const interestedPercentage = realtimeStudentCount > 0 ? Math.round((interestedCount / realtimeStudentCount) * 100) : 0;
@@ -364,62 +301,6 @@ export default function DashboardPage() {
 
   const showLoadingOverlay = isCameraLoading || !modelsLoaded;
   const loadingText = isCameraLoading ? "กำลังเปิดกล้อง..." : !modelsLoaded ? "กำลังโหลดโมเดลวิเคราะห์ใบหน้า..." : "";
-
-  if (!sessionStarted) {
-    return (
-       <div className="flex items-center justify-center h-full">
-            <Card className="w-full max-w-lg">
-                <CardHeader>
-                    <CardTitle className="text-2xl font-headline">เริ่มการสังเกตการณ์ใหม่</CardTitle>
-                    <CardDescription>กรอกข้อมูลเพื่อเริ่มบันทึกและวิเคราะห์เซสชันใหม่</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                     <div className="space-y-2">
-                        <Label htmlFor="name">ชื่อผู้สังเกตการณ์</Label>
-                        <Input
-                        id="name"
-                        type="text"
-                        value={observerName}
-                        onChange={(e) => setObserverName(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="subject">วิชา</Label>
-                        <Input
-                        id="subject"
-                        type="text"
-                        placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์"
-                        required
-                        value={observerSubject}
-                        onChange={(e) => setObserverSubject(e.target.value)}
-                        disabled={isStartingSession}
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="date">วันที่สังเกตการณ์</Label>
-                        <Input
-                        id="date"
-                        type="date"
-                        required
-                        value={observerDate}
-                        onChange={(e) => setObserverDate(e.target.value)}
-                        disabled={isStartingSession}
-                        />
-                    </div>
-                    <Button
-                        type="button"
-                        className="w-full font-bold text-lg"
-                        size="lg"
-                        onClick={handleStartSession}
-                        disabled={isStartingSession}
-                    >
-                        {isStartingSession ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
-                    </Button>
-                </CardContent>
-            </Card>
-       </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -489,21 +370,21 @@ export default function DashboardPage() {
                       <User className="h-5 w-5 text-muted-foreground" />
                       <div className="flex flex-col">
                           <span className="text-xs text-muted-foreground">ผู้สังเกตการณ์</span>
-                          <span className="font-semibold">{observerName}</span>
+                          <span className="font-semibold">{sessionInfo.name}</span>
                       </div>
                   </div>
                    <div className="flex items-center gap-4">
                       <BookOpen className="h-5 w-5 text-muted-foreground" />
                       <div className="flex flex-col">
                           <span className="text-xs text-muted-foreground">วิชา</span>
-                          <span className="font-semibold">{observerSubject}</span>
+                          <span className="font-semibold">{sessionInfo.subject}</span>
                       </div>
                   </div>
                    <div className="flex items-center gap-4">
                       <Clock className="h-5 w-5 text-muted-foreground" />
                       <div className="flex flex-col">
                           <span className="text-xs text-muted-foreground">วันที่</span>
-                          <span className="font-semibold">{observerDate}</span>
+                          <span className="font-semibold">{sessionInfo.date}</span>
                       </div>
                   </div>
               </CardContent>
@@ -584,4 +465,152 @@ export default function DashboardPage() {
       </div>
     </div>
   );
+}
+
+// =================================================================
+// Component for the "start session" form
+// =================================================================
+function StartSessionForm({ onSessionStart }: { onSessionStart: (info: SessionInfo) => void; }) {
+    const { toast } = useToast();
+    const { user, userName } = useAuth();
+
+    const [observerName, setObserverName] = useState('');
+    const [observerSubject, setObserverSubject] = useState('');
+    const [observerDate, setObserverDate] = useState('');
+    const [isStartingSession, setIsStartingSession] = useState(false);
+
+    useEffect(() => {
+        if (userName) {
+            const storedName = localStorage.getItem('observerName');
+            const storedSubject = localStorage.getItem('observerSubject');
+            
+            setObserverName(storedName || userName);
+            if (storedSubject) {
+                setObserverSubject(storedSubject);
+            }
+        }
+    }, [userName]);
+
+    const handleStartSession = async () => {
+        if (!observerName || !observerSubject || !observerDate) {
+            toast({
+                variant: 'destructive',
+                title: 'ข้อมูลไม่ครบถ้วน',
+                description: 'กรุณากรอกข้อมูลการสังเกตการณ์ให้ครบถ้วน',
+            });
+            return;
+        }
+        if (!user) {
+             toast({
+                variant: 'destructive',
+                title: 'ไม่พบผู้ใช้งาน',
+                description: 'กรุณาเข้าสู่ระบบอีกครั้ง',
+            });
+            return;
+        }
+        
+        setIsStartingSession(true);
+        try {
+          localStorage.setItem('observerName', observerName);
+          localStorage.setItem('observerSubject', observerSubject);
+          
+          const sessionRef = await addDoc(collection(db, "sessions"), {
+            observerName: observerName,
+            subject: observerSubject,
+            date: observerDate,
+            createdAt: serverTimestamp(),
+            userId: user.uid,
+          });
+          
+          toast({
+            title: 'เริ่มเซสชันสำเร็จ',
+            description: `เริ่มการสังเกตการณ์วิชา ${observerSubject}`,
+          });
+          
+          onSessionStart({
+              name: observerName,
+              subject: observerSubject,
+              date: observerDate,
+              id: sessionRef.id
+          });
+
+        } catch (error) {
+           console.error("Error starting session:", error);
+           toast({
+                variant: 'destructive',
+                title: 'เกิดข้อผิดพลาด',
+                description: 'ไม่สามารถเริ่มเซสชันได้ โปรดลองอีกครั้ง',
+           });
+        } finally {
+            setIsStartingSession(false);
+        }
+      };
+
+    return (
+         <div className="flex items-center justify-center h-full">
+              <Card className="w-full max-w-lg">
+                  <CardHeader>
+                      <CardTitle className="text-2xl font-headline">เริ่มการสังเกตการณ์ใหม่</CardTitle>
+                      <CardDescription>กรอกข้อมูลเพื่อเริ่มบันทึกและวิเคราะห์เซสชันใหม่</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                       <div className="space-y-2">
+                          <Label htmlFor="name">ชื่อผู้สังเกตการณ์</Label>
+                          <Input
+                          id="name"
+                          type="text"
+                          value={observerName}
+                          onChange={(e) => setObserverName(e.target.value)}
+                          />
+                      </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="subject">วิชา</Label>
+                          <Input
+                          id="subject"
+                          type="text"
+                          placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์"
+                          required
+                          value={observerSubject}
+                          onChange={(e) => setObserverSubject(e.target.value)}
+                          disabled={isStartingSession}
+                          />
+                      </div>
+                      <div className="space-y-2">
+                          <Label htmlFor="date">วันที่สังเกตการณ์</Label>
+                          <Input
+                          id="date"
+                          type="date"
+                          required
+                          value={observerDate}
+                          onChange={(e) => setObserverDate(e.target.value)}
+                          disabled={isStartingSession}
+                          />
+                      </div>
+                      <Button
+                          type="button"
+                          className="w-full font-bold text-lg"
+                          size="lg"
+                          onClick={handleStartSession}
+                          disabled={isStartingSession}
+                      >
+                          {isStartingSession ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
+                      </Button>
+                  </CardContent>
+              </Card>
+         </div>
+      );
+}
+
+
+// =================================================================
+// Main Page Component - Renders either the form or the dashboard
+// =================================================================
+export default function DashboardPage() {
+  const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
+
+  if (!sessionInfo) {
+    return <StartSessionForm onSessionStart={setSessionInfo} />;
+  }
+  
+  return <SessionDashboard sessionInfo={sessionInfo} />;
 }
