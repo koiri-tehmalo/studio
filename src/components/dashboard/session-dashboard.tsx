@@ -201,21 +201,25 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
 
         const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
         
-        const isInterested = await tf.tidy(() => {
-          if (!cnnModel || cnnModel.isDisposed) return false;
-          const faceImage = tf.browser.fromPixels(video)
-            .slice([box.y, box.x, 0], [box.height, box.width, 3])
-            .resizeBilinear([48, 48])
-            .mean(2)
-            .toFloat()
-            .div(tf.scalar(255.0))
-            .expandDims(0)
-            .expandDims(-1);
-          
-          const prediction = cnnModel.predict(faceImage) as tf.Tensor;
-          const [uninterestedScore, interestedScore] = prediction.dataSync();
+        const isInterested = await tf.tidy(async () => {
+            if (!cnnModel || cnnModel.isDisposed) return false;
+            
+            const faceImageTensor = tf.browser.fromPixels(video)
+                .slice([box.y, box.x, 0], [box.height, box.width, 3])
+                .resizeBilinear([48, 48])
+                .mean(2)
+                .toFloat()
+                .div(tf.scalar(255.0))
+                .expandDims(0)
+                .expandDims(-1);
+            
+            const prediction = cnnModel.predict(faceImageTensor) as tf.Tensor;
+            const predictionData = await prediction.data();
+            const [uninterestedScore, interestedScore] = predictionData;
+            
+            tf.dispose([faceImageTensor, prediction]);
 
-          return interestedScore > uninterestedScore;
+            return interestedScore > uninterestedScore;
         });
 
         if (isInterested) currentInterested++;
