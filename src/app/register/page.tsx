@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter, redirect } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,12 @@ export default function RegisterPage() {
   const [role, setRole] = useState('user');
   const [isLoading, setIsLoading] = useState(false);
   const { user, isLoading: isAuthLoading } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
   
   if (isAuthLoading) {
      return (
@@ -31,10 +37,6 @@ export default function RegisterPage() {
             <Loader2 className="h-16 w-16 animate-spin text-primary" />
         </div>
     );
-  }
-
-  if (user) {
-    redirect('/dashboard');
   }
 
   const handleRegister = async () => {
