@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter, redirect } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -29,9 +29,12 @@ export default function LoginPage() {
     );
   }
 
-  if (user) {
-    redirect('/dashboard');
-  }
+  useEffect (() => {
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
+  
 
 
   const handleLogin = async () => {
