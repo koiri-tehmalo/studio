@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { Smile, Meh, Users, Loader2, User, BookOpen, Clock, History } from 'lucide-react';
+import { Smile, Meh, Users, Loader2, User, BookOpen, Clock, History, FileDown } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
@@ -16,9 +17,6 @@ import type { SessionInfo, HistoricalData, FaceData } from '@/app/dashboard/type
 
 const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
 
-// =================================================================
-// Component for the main dashboard view after a session has started
-// =================================================================
 export default function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,14 +38,22 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const minuteTotalInterestedCountRef = useRef(0);
 
   const [liveCroppedFaces, setLiveCroppedFaces] = useState<FaceData[]>([]);
-  const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
-  const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
   
-  const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
+  const { stream, hasCameraPermission, stopStream } = useCamera();
+
+  useEffect(() => {
+    // Stop the stream when the component unmounts
+    return () => {
+      stopStream();
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+      faceLandmarkerRef.current?.close();
+      cnnModelRef.current?.dispose();
+    };
+  }, [stopStream]);
   
   useEffect(() => {
-    tempCanvasRef.current = document.createElement('canvas');
-
     const loadModels = async () => {
       console.log("🧠 loadModels started");
       try {
@@ -67,6 +73,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         await tf.setBackend('webgl');
         cnnModelRef.current = await tf.loadLayersModel('/model/model.json');
         
+        console.log("✅ Models loaded successfully");
         setModelsLoaded(true);
       } catch (error) {
         console.error("Failed to load AI models:", error);
@@ -78,14 +85,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
       }
     };
     loadModels();
-    
-    return () => {
-      faceLandmarkerRef.current?.close();
-      cnnModelRef.current?.dispose();
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-    };
   }, [toast]);
 
   const predictWebcam = useCallback(async () => {
@@ -94,7 +93,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!modelsLoaded || !faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 3) {
+    if (!modelsLoaded || !faceLandmarker || !cnnModel || !video || !canvas || video.paused || video.ended || video.readyState < 4) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
@@ -102,7 +101,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const results = faceLandmarker.detectForVideo(video, performance.now());
     const ctx = canvas.getContext('2d');
 
-    if (ctx && results.faceLandmarks && video.clientWidth > 0 && video.clientHeight > 0) {
+    if (ctx && results.faceLandmarks) {
+        const scaleX = video.clientWidth / video.videoWidth;
+        const scaleY = video.clientHeight / video.videoHeight;
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -119,26 +120,16 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                 maxY = Math.max(maxY, landmark.y * video.videoHeight);
             }
             const padding = 20;
-
-            const x = minX - padding;
-            const y = minY - padding;
+            const x = Math.max(0, minX - padding);
+            const y = Math.max(0, minY - padding);
             const width = (maxX - minX) + (padding * 2);
             const height = (maxY - minY) + (padding * 2);
 
-            const clampedX = Math.max(0, Math.round(x));
-            const clampedY = Math.max(0, Math.round(y));
-            const clampedWidth = Math.min(Math.round(width), video.videoWidth - clampedX);
-            const clampedHeight = Math.min(Math.round(height), video.videoHeight - clampedY);
-
-            if (clampedWidth <= 0 || clampedHeight <= 0) continue;
-
-            const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
-
-            const isInterested = await tf.tidy(async () => {
+            const isInterested = await tf.tidy(() => {
                 if (!cnnModelRef.current || cnnModelRef.current.isDisposed) return false;
                 
                 const faceImageTensor = tf.browser.fromPixels(video)
-                    .slice([box.y, box.x, 0], [box.height, box.width, 3])
+                    .slice([Math.round(y), Math.round(x), 0], [Math.round(height), Math.round(width), 3])
                     .resizeBilinear([48, 48])
                     .mean(2)
                     .toFloat()
@@ -147,53 +138,32 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                     .expandDims(-1);
                 
                 const prediction = cnnModelRef.current.predict(faceImageTensor) as tf.Tensor;
-                const predictionData = await prediction.data();
-                const [uninterestedScore, interestedScore] = predictionData;
-                
-                tf.dispose([faceImageTensor, prediction]);
+                const interestedScore = prediction.dataSync()[1];
 
-                return interestedScore > uninterestedScore;
+                return interestedScore > 0.5;
             });
-
+            
             if (isInterested) currentInterested++;
             
-            if (tempCanvasRef.current) {
-                const tempCtx = tempCanvasRef.current.getContext('2d');
-                if (tempCtx) {
-                    tempCanvasRef.current.width = box.width;
-                    tempCanvasRef.current.height = box.height;
-                    tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-                    faceImages.push({
-                      image: tempCanvasRef.current.toDataURL(),
-                      interested: isInterested,
-                    });
-                }
-            }
-
-            const canvasX = box.x * (canvas.width / video.videoWidth);
-            const canvasY = box.y * (canvas.height / video.videoHeight);
-            const canvasWidth = box.width * (canvas.width / video.videoWidth);
-            const canvasHeight = box.height * (canvas.height / video.videoHeight);
-            
-            const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
+            // Draw bounding box
             const color = isInterested ? '#4ade80' : '#f87171';
-
+            const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
+            
             ctx.strokeStyle = color;
             ctx.lineWidth = 3;
-            ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+            ctx.strokeRect(x * scaleX, y * scaleY, width * scaleX, height * scaleY);
             
             ctx.fillStyle = color;
             const textBackgroundHeight = 24;
             ctx.font = `bold 16px 'Poppins'`;
             const textWidth = ctx.measureText(thaiText).width;
             
-            ctx.fillRect(canvasX, canvasY - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
+            ctx.fillRect(x * scaleX, (y * scaleY) - textBackgroundHeight, textWidth + 12, textBackgroundHeight);
             
             ctx.fillStyle = '#fff';
-            ctx.fillText(thaiText, canvasX + 6, canvasY - 6);
+            ctx.fillText(thaiText, (x * scaleX) + 6, (y * scaleY) - 6);
         }
         
-        setLiveCroppedFaces(faceImages);
         setRealtimeStudentCount(results.faceLandmarks.length);
         setInterestedCount(currentInterested);
         
@@ -207,29 +177,21 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
-      setFacesForDisplay(liveCroppedFaces);
-      
       const frameCount = minuteFrameCountRef.current;
-      const totalStudents = minuteTotalStudentCountRef.current;
-      const totalInterested = minuteTotalInterestedCountRef.current;
-
-      minuteFrameCountRef.current = 0;
-      minuteTotalStudentCountRef.current = 0;
-      minuteTotalInterestedCountRef.current = 0;
-
       if (frameCount > 0) {
-        const avgPersonCount = Math.round(totalStudents / frameCount);
-        const avgInterested = Math.round(totalInterested / frameCount);
+        const avgPersonCount = Math.round(minuteTotalStudentCountRef.current / frameCount);
+        const avgInterested = Math.round(minuteTotalInterestedCountRef.current / frameCount);
         const avgUninterested = avgPersonCount - avgInterested;
 
-        const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
-        const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
+        minuteFrameCountRef.current = 0;
+        minuteTotalStudentCountRef.current = 0;
+        minuteTotalInterestedCountRef.current = 0;
 
         const newDisplayEntry: HistoricalData = {
           timestamp: format(new Date(), 'HH:mm:ss น.'),
           personCount: avgPersonCount,
-          interested: interestedPercent,
-          uninterested: uninterestedPercent,
+          interested: avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%',
+          uninterested: avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%',
         };
         
         setHistoricalData(prevData => [newDisplayEntry, ...prevData]);
@@ -244,51 +206,95 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             });
         } catch (error) {
             console.error("Failed to save timeline data:", error);
-            toast({
-                variant: 'destructive',
-                title: 'เกิดข้อผิดพลาดในการบันทึก',
-                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
-            });
         }
       }
     }, 60000); // Save every 1 minute
 
-    return () => {
-      clearInterval(dataCaptureInterval);
-    };
-  }, [sessionInfo.id, toast, liveCroppedFaces]);
-
-  const handleVideoPlay = useCallback(() => {
-    if (animationFrameId.current) {
-      cancelAnimationFrame(animationFrameId.current);
-    }
-    animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [predictWebcam]);
+    return () => clearInterval(dataCaptureInterval);
+  }, [sessionInfo.id]);
 
   useEffect(() => {
-    if (stream && videoRef.current) {
+    if (stream && videoRef.current && videoRef.current.srcObject !== stream) {
       videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Video play failed:", e));
+      videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.error("Video play failed:", e));
+      }
     }
   }, [stream]);
+
+  useEffect(() => {
+    if (modelsLoaded && stream) {
+        const video = videoRef.current;
+        const startPrediction = () => {
+            if (animationFrameId.current) {
+                cancelAnimationFrame(animationFrameId.current);
+            }
+            animationFrameId.current = requestAnimationFrame(predictWebcam);
+        };
+
+        if(video){
+            video.addEventListener("loadeddata", startPrediction);
+        }
+        
+        return () => {
+            if(video){
+                video.removeEventListener("loadeddata", startPrediction);
+            }
+        }
+    }
+  }, [modelsLoaded, stream, predictWebcam]);
+
 
   const uninterestedCount = realtimeStudentCount - interestedCount;
   const interestedPercentage = realtimeStudentCount > 0 ? Math.round((interestedCount / realtimeStudentCount) * 100) : 0;
   const uninterestedPercentage = realtimeStudentCount > 0 ? Math.round((uninterestedCount / realtimeStudentCount) * 100) : 0;
 
-  const showLoadingOverlay = isCameraLoading || !modelsLoaded;
-  const loadingText = isCameraLoading ? "กำลังเปิดกล้อง..." : !modelsLoaded ? "กำลังโหลดโมเดลวิเคราะห์ใบหน้า..." : "";
+  const handleExport = () => {
+    if (historicalData.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'ไม่มีข้อมูล',
+        description: 'ยังไม่มีข้อมูลย้อนหลังให้ส่งออก',
+      });
+      return;
+    }
+
+    const headers = ['เวลา', 'จำนวนคน (เฉลี่ย)', 'สนใจ (%)', 'ไม่สนใจ (%)'];
+    const data = historicalData.map(d => [d.timestamp, d.personCount, d.interested, d.uninterested]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," 
+      + headers.join(",") + "\n" 
+      + data.map(e => e.join(",")).join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const fileName = `session-report-${sessionInfo.subject}-${sessionInfo.date}.csv`;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link); 
+    link.click();
+    document.body.removeChild(link);
+
+    toast({
+        title: 'ส่งออกข้อมูลสำเร็จ',
+        description: `ไฟล์ ${fileName} ได้ถูกดาวน์โหลดแล้ว`,
+    });
+  };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 h-full">
       <div className="flex items-center justify-between">
         <div className="grid gap-1">
-            <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ด</h1>
+            <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ดการวิเคราะห์</h1>
             <p className="text-muted-foreground">การวิเคราะห์การมีส่วนร่วมในห้องเรียนแบบเรียลไทม์</p>
         </div>
+        <Button onClick={handleExport} disabled={historicalData.length === 0}>
+            <FileDown className="mr-2 h-4 w-4" />
+            ส่งออกเป็น Excel
+        </Button>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
         
         <div className="lg:col-span-2">
           <Card className="h-full flex flex-col">
@@ -297,42 +303,24 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
               <CardDescription>ตรวจจับและวิเคราะห์การมีส่วนร่วมจากวิดีโอแบบเรียลไทม์</CardDescription>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-center items-center gap-4">
-               <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
-                {facesForDisplay.length > 0 ? (
-                  facesForDisplay.map((faceData, index) => (
-                    <img
-                      key={index}
-                      src={faceData.image}
-                      alt={`Cropped face ${index + 1}`}
-                      className={`inline-block h-full w-auto rounded-md mr-2 border-4 ${
-                        faceData.interested ? 'border-green-400' : 'border-red-400'
-                      }`}
-                    />
-                  ))
-                ) : (
-                  <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                    รอการตรวจจับใบหน้า...
-                  </div>
-                )}
-              </div>
               <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
-                 <video ref={videoRef} onPlay={handleVideoPlay} className="w-full h-full object-cover" autoPlay muted playsInline />
+                 <video ref={videoRef} className="w-full h-full object-cover" autoPlay muted playsInline />
                  <canvas ref={canvasRef} className="absolute top-0 left-0" />
-                { showLoadingOverlay && (
+                { !modelsLoaded && (
                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
                       <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                      <p>{loadingText}</p>
+                      <p>กำลังโหลดโมเดลวิเคราะห์ใบหน้า...</p>
                    </div>
                 )}
+                 {hasCameraPermission === false && (
+                    <Alert variant="destructive" className="w-full max-w-md absolute">
+                      <AlertTitle>จำเป็นต้องเข้าถึงกล้อง</AlertTitle>
+                      <AlertDescription>
+                        โปรดอนุญาตให้เข้าถึงกล้องเพื่อใช้คุณสมบัตินี้
+                      </AlertDescription>
+                    </Alert>
+                  )}
               </div>
-               {hasCameraPermission === false && (
-                <Alert variant="destructive" className="w-full">
-                  <AlertTitle>จำเป็นต้องเข้าถึงกล้อง</AlertTitle>
-                  <AlertDescription>
-                    โปรดอนุญาตให้เข้าถึงกล้องเพื่อใช้คุณสมบัตินี้
-                  </AlertDescription>
-                </Alert>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -384,7 +372,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
               <CardContent>
                 <div className="text-2xl font-bold">{interestedPercentage}%</div>
                 <p className="text-xs text-muted-foreground">{interestedCount} จาก {realtimeStudentCount} คน</p>
-              </CardContent>
+              </Content>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -394,7 +382,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
               <CardContent>
                 <div className="text-2xl font-bold">{uninterestedPercentage}%</div>
                 <p className="text-xs text-muted-foreground">{uninterestedCount} จาก {realtimeStudentCount} คน</p>
-              </CardContent>
+              </Content>
             </Card>
         </div>
         

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 interface CameraContextType {
@@ -10,6 +10,8 @@ interface CameraContextType {
   stream: MediaStream | null;
   hasCameraPermission: boolean | null;
   isLoading: boolean;
+  startStream: () => Promise<void>;
+  stopStream: () => void;
 }
 
 const CameraContext = createContext<CameraContextType | undefined>(undefined);
@@ -19,54 +21,48 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | undefined>();
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const getDevicesAndPermissions = useCallback(async () => {
-    setIsLoading(true);
-    if (!navigator.mediaDevices?.getUserMedia) {
-        console.error("Camera API not supported in this browser.");
-        setHasCameraPermission(false);
-        setIsLoading(false);
-        toast({
-            variant: 'destructive',
-            title: 'ไม่รองรับกล้อง',
-            description: 'เบราว์เซอร์ของคุณไม่รองรับการใช้งานกล้อง',
-        });
-        return;
+  // Function to stop the current stream
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      setStream(null);
     }
+  }, []);
+
+  // Effect to stop stream on unmount
+  useEffect(() => {
+    return () => {
+      stopStream();
+    };
+  }, [stopStream]);
+
+  const getDevices = useCallback(async () => {
     try {
+      // A quick check for permissions without keeping the stream open
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
-      
+      tempStream.getTracks().forEach(track => track.stop());
+
       const allDevices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = allDevices.filter(device => device.kind === 'videoinput');
       setDevices(videoDevices);
 
       const savedDeviceId = localStorage.getItem('selectedCameraId');
-      
-      let finalDeviceId;
       if (savedDeviceId && videoDevices.some(d => d.deviceId === savedDeviceId)) {
-        finalDeviceId = savedDeviceId;
+        setSelectedDeviceId(savedDeviceId);
       } else if (videoDevices.length > 0) {
-        finalDeviceId = videoDevices[0].deviceId;
+        const firstDeviceId = videoDevices[0].deviceId;
+        setSelectedDeviceId(firstDeviceId);
+        localStorage.setItem('selectedCameraId', firstDeviceId);
       }
-       
-       if (finalDeviceId) {
-          setSelectedDeviceId(finalDeviceId);
-          localStorage.setItem('selectedCameraId', finalDeviceId);
-       } else {
-        setIsLoading(false);
-       }
-      
-      tempStream.getTracks().forEach(track => track.stop());
-
     } catch (error) {
-      console.error('Error accessing camera:', error);
+      console.error('Error getting devices:', error);
       setHasCameraPermission(false);
-      setDevices([]);
-      setStream(null);
-      setIsLoading(false);
       toast({
         variant: 'destructive',
         title: 'การเข้าถึงกล้องถูกปฏิเสธ',
@@ -75,73 +71,59 @@ export function CameraProvider({ children }: { children: ReactNode }) {
     }
   }, [toast]);
 
+  // Initial load of devices
   useEffect(() => {
-    getDevicesAndPermissions();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    getDevices();
+  }, [getDevices]);
+
+
+  const startStream = useCallback(async () => {
+    stopStream(); // Stop any existing stream
+    
+    if (!selectedDeviceId) {
+        toast({
+            variant: 'destructive',
+            title: 'ไม่พบกล้อง',
+            description: 'ไม่สามารถค้นหาอุปกรณ์กล้องได้ โปรดลองอีกครั้ง',
+        });
+        return;
+    }
+
+    setIsLoading(true);
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: selectedDeviceId } }
+      });
+      streamRef.current = newStream;
+      setStream(newStream);
+      setHasCameraPermission(true);
+    } catch (error) {
+      console.error('Failed to start new stream:', error);
+      setHasCameraPermission(false);
+      toast({
+        variant: 'destructive',
+        title: 'ไม่สามารถเปิดกล้องได้',
+        description: 'ไม่สามารถเปิดใช้งานกล้องที่เลือกได้ โปรดลองอีกครั้ง',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedDeviceId, stopStream, toast]);
 
   const updateSelectedDevice = (deviceId: string) => {
-    if (deviceId !== selectedDeviceId) {
-        setSelectedDeviceId(deviceId);
-        localStorage.setItem('selectedCameraId', deviceId);
-    }
-  }
-
-  useEffect(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-    }
-
-    if (!selectedDeviceId || hasCameraPermission !== true) {
-      setStream(null);
-      setIsLoading(false);
-      return;
-    };
-
-    let isCancelled = false;
-    setIsLoading(true);
-    
-    navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: selectedDeviceId } }
-    }).then(newStream => {
-      if (!isCancelled) {
-        setStream(newStream);
-      } else {
-        newStream.getTracks().forEach(track => track.stop());
-      }
-    }).catch(error => {
-      console.error('Failed to get new stream:', error);
-       if (!isCancelled) {
-          toast({
-            variant: 'destructive',
-            title: 'ไม่สามารถเปิดกล้องได้',
-            description: 'ไม่สามารถเปิดใช้งานกล้องที่เลือกได้ โปรดลองอีกครั้ง',
-          });
-          setStream(null);
-       }
-    }).finally(() => {
-        if (!isCancelled) {
-            setIsLoading(false);
-        }
-    });
-
-    return () => {
-      isCancelled = true;
-      if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission]);
-
-
+    setSelectedDeviceId(deviceId);
+    localStorage.setItem('selectedCameraId', deviceId);
+  };
+  
   const value = {
     devices,
     selectedDeviceId,
     setSelectedDeviceId: updateSelectedDevice,
     stream,
     hasCameraPermission,
-    isLoading
+    isLoading,
+    startStream,
+    stopStream,
   };
 
   return <CameraContext.Provider value={value}>{children}</CameraContext.Provider>;

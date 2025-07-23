@@ -22,7 +22,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
     const [observerName, setObserverName] = useState('');
     const [observerSubject, setObserverSubject] = useState('');
     const [observerDate, setObserverDate] = useState('');
-    const [isStartingSession, setIsStartingSession] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
         if (userName) {
@@ -54,7 +54,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
             return;
         }
         
-        setIsStartingSession(true);
+        setIsSubmitting(true);
         try {
           localStorage.setItem('observerName', observerName);
           localStorage.setItem('observerSubject', observerSubject);
@@ -69,9 +69,10 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
           
           toast({
             title: 'เริ่มเซสชันสำเร็จ',
-            description: `เริ่มการสังเกตการณ์วิชา ${observerSubject}`,
+            description: `กำลังเปิดกล้องเพื่อเริ่มการสังเกตการณ์...`,
           });
           
+          // This now just passes the data up. The parent (page.tsx) will handle starting the stream.
           onSessionStart({
               name: observerName,
               subject: observerSubject,
@@ -86,8 +87,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                 title: 'เกิดข้อผิดพลาด',
                 description: 'ไม่สามารถเริ่มเซสชันได้ โปรดลองอีกครั้ง',
            });
-        } finally {
-            setIsStartingSession(false);
+           setIsSubmitting(false); // Only set back on error
         }
       };
 
@@ -106,6 +106,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           type="text"
                           value={observerName}
                           onChange={(e) => setObserverName(e.target.value)}
+                          disabled={isSubmitting}
                           />
                       </div>
                       <div className="space-y-2">
@@ -117,7 +118,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           required
                           value={observerSubject}
                           onChange={(e) => setObserverSubject(e.target.value)}
-                          disabled={isStartingSession}
+                          disabled={isSubmitting}
                           />
                       </div>
                       <div className="space-y-2">
@@ -128,7 +129,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           required
                           value={observerDate}
                           onChange={(e) => setObserverDate(e.target.value)}
-                          disabled={isStartingSession}
+                          disabled={isSubmitting}
                           />
                       </div>
                       <Button
@@ -136,9 +137,9 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           className="w-full font-bold text-lg"
                           size="lg"
                           onClick={handleStartSession}
-                          disabled={isStartingSession}
+                          disabled={isSubmitting}
                       >
-                          {isStartingSession ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
+                          {isSubmitting ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
                       </Button>
                   </CardContent>
               </Card>
