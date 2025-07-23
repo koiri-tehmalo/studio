@@ -86,6 +86,8 @@ export default function DashboardPage() {
   
   useEffect(() => {
     tempCanvasRef.current = document.createElement('canvas');
+    let loadedFaceLandmarker: FaceLandmarker | undefined;
+    let loadedCnnModel: tf.LayersModel | undefined;
 
     const loadModels = async () => {
       try {
@@ -101,10 +103,12 @@ export default function DashboardPage() {
           runningMode: "VIDEO",
           numFaces: 20,
         });
+        loadedFaceLandmarker = landmarker;
         setFaceLandmarker(landmarker);
 
         await tf.setBackend('webgl');
         const model = await tf.loadLayersModel('/model/model.json');
+        loadedCnnModel = model;
         setCnnModel(model);
 
         setModelsLoaded(true);
@@ -120,13 +124,13 @@ export default function DashboardPage() {
     loadModels();
     
     return () => {
-      faceLandmarker?.close();
-      cnnModel?.dispose();
+      loadedFaceLandmarker?.close();
+      loadedCnnModel?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast, faceLandmarker, cnnModel]);
+  }, [toast]);
 
   useEffect(() => {
     if (!sessionStarted || !currentSessionId) return;
