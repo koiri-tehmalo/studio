@@ -21,6 +21,12 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { user, isLoading: isAuthLoading } = useAuth();
 
+  useEffect (() => {
+    if (user) {
+      router.push('/dashboard');
+    }
+  }, [user, router]);
+  
   if (isAuthLoading) {
      return (
         <div className="flex justify-center items-center h-screen">
@@ -28,14 +34,6 @@ export default function LoginPage() {
         </div>
     );
   }
-
-  useEffect (() => {
-    if (user) {
-      router.push('/dashboard');
-    }
-  }, [user, router]);
-  
-
 
   const handleLogin = async () => {
     if (!email || !password) {
