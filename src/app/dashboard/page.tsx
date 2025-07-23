@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 
 // Dynamically import the SessionDashboard component with SSR turned off
 // This ensures it only runs on the client-side, where browser APIs are available.
-const SessionDashboard = dynamic(() => import('@/components/dashboard/session-dashboard'), {
+const SessionDashboard = dynamic(() => import('@/components/dashboard/SessionDashboard'), {
   ssr: false,
   loading: () => (
     <div className="flex justify-center items-center h-full">
