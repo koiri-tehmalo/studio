@@ -146,10 +146,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             if (clampedWidth <= 0 || clampedHeight <= 0) continue;
 
             const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
-
-            const isInterested = await tf.tidy(async () => {
-                if (!cnnModel || cnnModel.isDisposed) return false;
-                
+            
+            let isInterested = false;
+            if (cnnModel && !cnnModel.isDisposed) {
                 const faceImageTensor = tf.browser.fromPixels(video)
                     .slice([box.y, box.x, 0], [box.height, box.width, 3])
                     .resizeBilinear([48, 48])
@@ -163,10 +162,10 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                 const predictionData = await prediction.data();
                 const [uninterestedScore, interestedScore] = predictionData;
                 
-                tf.dispose([faceImageTensor, prediction]);
+                isInterested = interestedScore > uninterestedScore;
 
-                return interestedScore > uninterestedScore;
-            });
+                tf.dispose([faceImageTensor, prediction]);
+            }
 
             if (isInterested) currentInterested++;
             
