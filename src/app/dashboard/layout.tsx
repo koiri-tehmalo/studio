@@ -109,6 +109,13 @@ function SupportDialog() {
   );
 }
 
+// A component to trigger camera initialization
+function CameraInitializer() {
+    // This hook will trigger the camera provider to ask for permissions and get devices.
+    useCamera();
+    return null;
+}
+
 
 export default function DashboardLayout({
   children,
@@ -153,6 +160,7 @@ export default function DashboardLayout({
   
   return (
     <CameraProvider>
+      <CameraInitializer />
        <input
         type="file"
         ref={fileInputRef}

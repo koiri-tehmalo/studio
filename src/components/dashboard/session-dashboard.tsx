@@ -264,11 +264,12 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [toast, modelsLoaded]);
+  }, [modelsLoaded, toast]);
 
   const handleVideoPlay = useCallback(() => {
+    // Stop any previous animation frame to prevent multiple loops
     if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
+      cancelAnimationFrame(animationFrameId.current);
     }
     animationFrameId.current = requestAnimationFrame(predictWebcam);
   }, [predictWebcam]);
