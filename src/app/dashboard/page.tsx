@@ -242,6 +242,11 @@ export default function DashboardPage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     
+    if (video.readyState < 3) { // Check if video has enough data to play
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    
     const results = faceLandmarker.detectForVideo(video, performance.now());
 
     const ctx = canvas.getContext('2d');
