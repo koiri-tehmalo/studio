@@ -54,9 +54,12 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       } else if (videoDevices.length > 0) {
         // Otherwise, use the first available video device
         finalDeviceId = videoDevices[0].deviceId;
-        localStorage.setItem('selectedCameraId', finalDeviceId);
       }
-      setSelectedDeviceId(finalDeviceId);
+       
+       if (finalDeviceId) {
+          setSelectedDeviceId(finalDeviceId);
+          localStorage.setItem('selectedCameraId', finalDeviceId);
+       }
       
       // Stop the temporary stream used for getting permissions
       tempStream.getTracks().forEach(track => track.stop());
@@ -69,7 +72,8 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         description: 'โปรดเปิดใช้งานการเข้าถึงกล้องในการตั้งค่าเบราว์เซอร์ของคุณ',
       });
     } finally {
-      setIsLoading(false);
+        // We set loading to false here after everything is done.
+        // The stream will be set in the next effect.
     }
   }, [toast]);
 
@@ -83,12 +87,12 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // This effect handles the creation and cleanup of the camera stream
+    let isCancelled = false;
+
     if (selectedDeviceId && hasCameraPermission) {
-      let isCancelled = false;
+      setIsLoading(true);
       
       const getNewStream = async () => {
-        // Stop any previous stream before getting a new one
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
@@ -109,24 +113,23 @@ export function CameraProvider({ children }: { children: ReactNode }) {
               });
               setStream(null);
            }
+        } finally {
+            if (!isCancelled) {
+                setIsLoading(false);
+            }
         }
       };
       
       getNewStream();
+    } else if (hasCameraPermission === false) {
+        setIsLoading(false);
+    }
 
-      // Cleanup function to stop the stream when the component unmounts or device changes
-      return () => {
-        isCancelled = true;
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
+    return () => {
+      isCancelled = true;
+      if (stream) {
+          stream.getTracks().forEach(track => track.stop());
       }
-    } else {
-        // If no device is selected or no permission, ensure stream is null and stopped
-        if(stream) {
-            stream.getTracks().forEach(track => track.stop());
-            setStream(null);
-        }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDeviceId, hasCameraPermission]);
