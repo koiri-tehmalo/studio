@@ -52,6 +52,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     let model: tf.LayersModel | undefined;
 
     const loadModels = async () => {
+      console.log("🧠 loadModels started");
       try {
         const vision = await FilesetResolver.forVisionTasks(
           "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
@@ -84,73 +85,13 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
-      landmarker?.close();
-      model?.dispose();
+      faceLandmarkerRef.current?.close();
+      cnnModelRef.current?.dispose();
       if (animationFrameId.current) {
         cancelAnimationFrame(animationFrameId.current);
       }
     };
   }, [toast]);
-
-  useEffect(() => {
-    if (stream && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch(e => console.error("Video play failed:", e));
-    }
-  }, [stream]);
-
-  useEffect(() => {
-    const dataCaptureInterval = setInterval(async () => {
-      setFacesForDisplay(liveCroppedFaces);
-      
-      const frameCount = minuteFrameCountRef.current;
-      const totalStudents = minuteTotalStudentCountRef.current;
-      const totalInterested = minuteTotalInterestedCountRef.current;
-
-      minuteFrameCountRef.current = 0;
-      minuteTotalStudentCountRef.current = 0;
-      minuteTotalInterestedCountRef.current = 0;
-
-      if (frameCount > 0) {
-        const avgPersonCount = Math.round(totalStudents / frameCount);
-        const avgInterested = Math.round(totalInterested / frameCount);
-        const avgUninterested = avgPersonCount - avgInterested;
-
-        const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
-        const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
-
-        const newDisplayEntry = {
-          timestamp: format(new Date(), 'HH:mm:ss น.'),
-          personCount: avgPersonCount,
-          interested: interestedPercent,
-          uninterested: uninterestedPercent,
-        };
-        
-        setHistoricalData(prevData => [newDisplayEntry, ...prevData]);
-
-        try {
-            const timelineRef = collection(db, "sessions", sessionInfo.id, "timeline");
-            await addDoc(timelineRef, {
-                timestamp: serverTimestamp(),
-                personCount: avgPersonCount,
-                interestedCount: avgInterested,
-                uninterestedCount: avgUninterested
-            });
-        } catch (error) {
-            console.error("Failed to save timeline data:", error);
-            toast({
-                variant: 'destructive',
-                title: 'เกิดข้อผิดพลาดในการบันทึก',
-                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
-            });
-        }
-      }
-    }, 60000); // Save every 1 minute
-
-    return () => {
-      clearInterval(dataCaptureInterval);
-    };
-  }, [sessionInfo.id, toast, liveCroppedFaces]);
 
   const predictWebcam = useCallback(async () => {
     const faceLandmarker = faceLandmarkerRef.current;
@@ -267,15 +208,74 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [modelsLoaded]);
+  }, [modelsLoaded, toast]);
+
+  useEffect(() => {
+    const dataCaptureInterval = setInterval(async () => {
+      setFacesForDisplay(liveCroppedFaces);
+      
+      const frameCount = minuteFrameCountRef.current;
+      const totalStudents = minuteTotalStudentCountRef.current;
+      const totalInterested = minuteTotalInterestedCountRef.current;
+
+      minuteFrameCountRef.current = 0;
+      minuteTotalStudentCountRef.current = 0;
+      minuteTotalInterestedCountRef.current = 0;
+
+      if (frameCount > 0) {
+        const avgPersonCount = Math.round(totalStudents / frameCount);
+        const avgInterested = Math.round(totalInterested / frameCount);
+        const avgUninterested = avgPersonCount - avgInterested;
+
+        const interestedPercent = avgPersonCount > 0 ? `${Math.round((avgInterested / avgPersonCount) * 100)}%` : '0%';
+        const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
+
+        const newDisplayEntry = {
+          timestamp: format(new Date(), 'HH:mm:ss น.'),
+          personCount: avgPersonCount,
+          interested: interestedPercent,
+          uninterested: uninterestedPercent,
+        };
+        
+        setHistoricalData(prevData => [newDisplayEntry, ...prevData]);
+
+        try {
+            const timelineRef = collection(db, "sessions", sessionInfo.id, "timeline");
+            await addDoc(timelineRef, {
+                timestamp: serverTimestamp(),
+                personCount: avgPersonCount,
+                interestedCount: avgInterested,
+                uninterestedCount: avgUninterested
+            });
+        } catch (error) {
+            console.error("Failed to save timeline data:", error);
+            toast({
+                variant: 'destructive',
+                title: 'เกิดข้อผิดพลาดในการบันทึก',
+                description: 'ไม่สามารถบันทึกข้อมูลย้อนหลังลงฐานข้อมูลได้',
+            });
+        }
+      }
+    }, 60000); // Save every 1 minute
+
+    return () => {
+      clearInterval(dataCaptureInterval);
+    };
+  }, [sessionInfo.id, toast, liveCroppedFaces]);
 
   const handleVideoPlay = useCallback(() => {
-    // Stop any previous animation frame to prevent multiple loops
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current);
     }
     animationFrameId.current = requestAnimationFrame(predictWebcam);
   }, [predictWebcam]);
+
+  useEffect(() => {
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(e => console.error("Video play failed:", e));
+    }
+  }, [stream]);
 
   const uninterestedCount = realtimeStudentCount - interestedCount;
   const interestedPercentage = realtimeStudentCount > 0 ? Math.round((interestedCount / realtimeStudentCount) * 100) : 0;
