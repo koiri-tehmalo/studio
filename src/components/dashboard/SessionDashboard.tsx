@@ -147,25 +147,28 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
 
             const box = { x: clampedX, y: clampedY, width: clampedWidth, height: clampedHeight };
             
-            let isInterested = false;
-            if (cnnModel && !cnnModel.isDisposed) {
-                const faceImageTensor = tf.browser.fromPixels(video)
-                    .slice([box.y, box.x, 0], [box.height, box.width, 3])
-                    .resizeBilinear([48, 48])
-                    .mean(2)
-                    .toFloat()
-                    .div(tf.scalar(255.0))
-                    .expandDims(0)
-                    .expandDims(-1);
-                
-                const prediction = cnnModel.predict(faceImageTensor) as tf.Tensor;
-                const predictionData = await prediction.data();
-                const [uninterestedScore, interestedScore] = predictionData;
-                
-                isInterested = interestedScore > uninterestedScore;
+            const isInterested = await tf.tidy(async () => {
+              if (!cnnModel || cnnModel.isDisposed) return false;
+              
+              const faceImageTensor = tf.browser.fromPixels(video)
+                  .slice([box.y, box.x, 0], [box.height, box.width, 3])
+                  .resizeBilinear([48, 48])
+                  .mean(2)
+                  .toFloat()
+                  .div(tf.scalar(255.0))
+                  .expandDims(0)
+                  .expandDims(-1);
+              
+              const prediction = cnnModel.predict(faceImageTensor) as tf.Tensor;
+              const predictionData = await prediction.data();
+              const [uninterestedScore, interestedScore] = predictionData;
 
-                tf.dispose([faceImageTensor, prediction]);
-            }
+              // Manually dispose tensors as we are in an async tidy
+              faceImageTensor.dispose();
+              prediction.dispose();
+
+              return interestedScore > uninterestedScore;
+            });
 
             if (isInterested) currentInterested++;
             
@@ -216,7 +219,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [modelsLoaded, toast]);
+  }, [modelsLoaded]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
