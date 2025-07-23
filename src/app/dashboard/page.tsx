@@ -232,9 +232,9 @@ export default function DashboardPage() {
   };
 
   const predictWebcam = async () => {
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 4 || !sessionStarted || !modelsLoaded) {
-      if (videoRef.current && !videoRef.current.paused) {
-        animationFrameId.current = requestAnimationFrame(predictWebcam);
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.ended || !sessionStarted) {
+      if (animationFrameId.current) {
+         cancelAnimationFrame(animationFrameId.current);
       }
       return;
     }
@@ -343,7 +343,9 @@ export default function DashboardPage() {
   };
 
   const handleVideoPlay = () => {
-    if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+    if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+    }
     animationFrameId.current = requestAnimationFrame(predictWebcam);
   };
 
