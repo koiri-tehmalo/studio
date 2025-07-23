@@ -36,7 +36,6 @@ export function CameraProvider({ children }: { children: ReactNode }) {
         return;
     }
     try {
-      // We need to get permission first to enumerate all devices
       const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setHasCameraPermission(true);
       
@@ -55,7 +54,6 @@ export function CameraProvider({ children }: { children: ReactNode }) {
       }
       setSelectedDeviceId(finalDeviceId);
       
-      // Stop the temporary stream used for getting permissions
       tempStream.getTracks().forEach(track => track.stop());
     } catch (error) {
       console.error('Error accessing camera:', error);
@@ -80,25 +78,21 @@ export function CameraProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Only run this effect if we have permission and a device is selected
     if (selectedDeviceId && hasCameraPermission) {
-      let active = true;
+      let currentStream: MediaStream | null = null;
       
-      // Stop any previous stream
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-
       const getNewStream = async () => {
         try {
+          // Stop any previous stream before getting a new one
+          if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+          }
+
           const newStream = await navigator.mediaDevices.getUserMedia({
             video: { deviceId: { exact: selectedDeviceId } }
           });
-          if (active) {
-            setStream(newStream);
-          } else {
-             newStream.getTracks().forEach(track => track.stop());
-          }
+          currentStream = newStream;
+          setStream(newStream);
         } catch (error) {
           console.error('Failed to get new stream:', error);
           toast({
@@ -106,22 +100,27 @@ export function CameraProvider({ children }: { children: ReactNode }) {
             title: 'ไม่สามารถเปิดกล้องได้',
             description: 'ไม่สามารถเปิดใช้งานกล้องที่เลือกได้ โปรดลองอีกครั้ง',
           });
+          setStream(null);
         }
       };
       
       getNewStream();
 
       return () => {
-        active = false;
-        // Cleanup function to stop the stream when the component unmounts or dependencies change
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
+        // Cleanup function to stop the stream when the component unmounts or device changes
+        if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
         }
       }
+    } else {
+        // If no device is selected or no permission, ensure stream is null
+        if(stream) {
+            stream.getTracks().forEach(track => track.stop());
+            setStream(null);
+        }
     }
-  // We want this effect to re-run ONLY when selectedDeviceId or hasCameraPermission changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDeviceId, hasCameraPermission]);
+  }, [selectedDeviceId, hasCameraPermission, toast]);
 
 
   const value = {
