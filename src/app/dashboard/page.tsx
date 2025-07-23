@@ -20,14 +20,24 @@ const SessionDashboard = dynamic(() => import('@/components/dashboard/SessionDas
 
 
 // =================================================================
-// Main Page Component - Renders either the form or the dashboard
+// Main Page Component - Renders both the form and the dashboard
+// but toggles visibility to preserve the dashboard's state.
 // =================================================================
 export default function DashboardPage() {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
 
-  if (!sessionInfo) {
-    return <StartSessionForm onSessionStart={setSessionInfo} />;
-  }
-  
-  return <SessionDashboard sessionInfo={sessionInfo} />;
+  return (
+    <div className="h-full">
+      {/* The StartSessionForm is always rendered but hidden when a session is active */}
+      <div style={{ display: sessionInfo ? 'none' : 'flex' }} className="h-full items-center justify-center">
+        <StartSessionForm onSessionStart={setSessionInfo} />
+      </div>
+
+      {/* The SessionDashboard is always rendered but hidden until a session starts. 
+          This prevents re-mounting and re-loading of AI models. */}
+      <div style={{ display: sessionInfo ? 'block' : 'none' }} className="h-full">
+        {sessionInfo && <SessionDashboard sessionInfo={sessionInfo} />}
+      </div>
+    </div>
+  );
 }
