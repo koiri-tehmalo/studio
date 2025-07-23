@@ -91,7 +91,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast]);
+  }, []);
 
   const predictWebcam = useCallback(async () => {
     const faceLandmarker = faceLandmarkerRef.current;
