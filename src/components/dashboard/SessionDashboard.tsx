@@ -57,7 +57,13 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
     
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.readyState < 2 || videoRef.current.paused) {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused) {
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    if (videoRef.current.readyState < 2) {
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
     
