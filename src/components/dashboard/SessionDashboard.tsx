@@ -42,7 +42,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const { stream, hasCameraPermission, stopStream } = useCamera();
 
   useEffect(() => {
-    // Stop the stream when the component unmounts
     return () => {
       stopStream();
       if (animationFrameId.current) {
@@ -145,7 +144,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             
             if (isInterested) currentInterested++;
             
-            // Draw bounding box
             const color = isInterested ? '#4ade80' : '#f87171';
             const thaiText = isInterested ? EMOTION_CLASSES[1] : EMOTION_CLASSES[0];
             
@@ -173,7 +171,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [modelsLoaded]);
+  }, [modelsLoaded, predictWebcam]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
@@ -218,7 +216,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
       videoRef.current.srcObject = stream;
       videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().catch(e => console.error("Video play failed:", e));
-      }
+      };
     }
   }, [stream]);
 
@@ -240,7 +238,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             if(video){
                 video.removeEventListener("loadeddata", startPrediction);
             }
-        }
+        };
     }
   }, [modelsLoaded, stream, predictWebcam]);
 
