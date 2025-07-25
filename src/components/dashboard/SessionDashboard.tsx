@@ -108,7 +108,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         let currentInterested = 0;
-        const faceImages: FaceData[] = [];
 
         for (const landmarks of results.faceLandmarks) {
             let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
@@ -124,9 +123,11 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             const width = (maxX - minX) + (padding * 2);
             const height = (maxY - minY) + (padding * 2);
 
+            if (!cnnModelRef.current || cnnModelRef.current.isDisposed) {
+                continue;
+            }
+            
             const isInterested = await tf.tidy(() => {
-                if (!cnnModelRef.current || cnnModelRef.current.isDisposed) return false;
-                
                 const faceImageTensor = tf.browser.fromPixels(video)
                     .slice([Math.round(y), Math.round(x), 0], [Math.round(height), Math.round(width), 3])
                     .resizeBilinear([48, 48])
@@ -136,9 +137,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                     .expandDims(0)
                     .expandDims(-1);
                 
-                const prediction = cnnModelRef.current.predict(faceImageTensor) as tf.Tensor;
+                const prediction = cnnModelRef.current!.predict(faceImageTensor) as tf.Tensor;
                 const interestedScore = prediction.dataSync()[1];
-
+                
                 return interestedScore > 0.5;
             });
             
@@ -171,7 +172,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
-  }, [modelsLoaded, predictWebcam]);
+  }, [modelsLoaded]);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
@@ -237,6 +238,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         return () => {
             if(video){
                 video.removeEventListener("loadeddata", startPrediction);
+            }
+            if (animationFrameId.current) {
+                cancelAnimationFrame(animationFrameId.current);
             }
         };
     }
