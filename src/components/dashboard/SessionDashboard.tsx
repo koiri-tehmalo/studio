@@ -57,12 +57,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
     
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
-      return;
-    }
-
-    if (videoRef.current.readyState < 2) {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 2) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
@@ -385,6 +380,10 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
                       <p>{loadingText}</p>
                    </div>
                 )}
+              </div>
+               <div className="flex items-center justify-end w-full text-sm text-muted-foreground">
+                <span className={`h-2.5 w-2.5 rounded-full mr-2 ${modelsLoaded ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
+                MediaPipe & CNN
               </div>
                {hasCameraPermission === false && (
                 <Alert variant="destructive" className="w-full">
