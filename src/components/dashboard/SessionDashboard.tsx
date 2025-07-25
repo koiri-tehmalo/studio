@@ -57,10 +57,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
     
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.readyState < 2) {
-      if (videoRef.current && !videoRef.current.paused) {
-          animationFrameId.current = requestAnimationFrame(predictWebcam);
-      }
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.readyState < 2 || videoRef.current.paused) {
       return;
     }
     
@@ -171,16 +168,12 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
       minuteTotalInterestedCountRef.current += currentInterested;
     }
     
-    if (videoRef.current && !videoRef.current.paused) {
-        animationFrameId.current = requestAnimationFrame(predictWebcam);
-    }
+    animationFrameId.current = requestAnimationFrame(predictWebcam);
+    
   }, [modelsLoaded]);
 
   const handleVideoPlay = useCallback(() => {
     if (modelsLoaded) {
-       if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
       animationFrameId.current = requestAnimationFrame(predictWebcam);
     }
   }, [modelsLoaded, predictWebcam]);
@@ -238,11 +231,11 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
       }
   }, [modelsLoaded, handleVideoPlay]);
 
-  // New effect to update the displayed faces every second
+  // New effect to update the displayed faces every 30 seconds
   useEffect(() => {
     const faceUpdateInterval = setInterval(() => {
       setFacesForDisplay([...liveCroppedFaces.current]);
-    }, 1000); // Update every second
+    }, 30000); // Update every 30 seconds
 
     return () => clearInterval(faceUpdateInterval);
   }, []);
