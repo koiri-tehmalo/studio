@@ -32,8 +32,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
-  const [per10MinuteData, setPer10MinuteData] = useState<any[]>([]);
-  const [hourlyData, setHourlyData] = useState<any[]>([]);
   const { toast } = useToast();
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
@@ -43,7 +41,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const minuteTotalStudentCountRef = useRef(0);
   const minuteTotalInterestedCountRef = useRef(0);
 
-  const [liveCroppedFaces, setLiveCroppedFaces] = useState<FaceData[]>([]);
+  const liveCroppedFaces = useRef<FaceData[]>([]);
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
@@ -59,7 +57,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
     
-    if (!modelsLoaded || !faceLandmarker || !cnnModel || cnnModel.isDisposed || !videoRef.current || !canvasRef.current || videoRef.current.readyState < 2 || videoRef.current.paused) {
+    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.readyState < 2) {
       if (videoRef.current && !videoRef.current.paused) {
           animationFrameId.current = requestAnimationFrame(predictWebcam);
       }
@@ -164,7 +162,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
-      setLiveCroppedFaces(faceImages);
+      liveCroppedFaces.current = faceImages;
       setRealtimeStudentCount(results.faceLandmarks.length);
       setInterestedCount(currentInterested);
       
@@ -173,7 +171,9 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
       minuteTotalInterestedCountRef.current += currentInterested;
     }
     
-    animationFrameId.current = requestAnimationFrame(predictWebcam);
+    if (videoRef.current && !videoRef.current.paused) {
+        animationFrameId.current = requestAnimationFrame(predictWebcam);
+    }
   }, [modelsLoaded]);
 
   const handleVideoPlay = useCallback(() => {
@@ -207,10 +207,6 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         cnnModelRef.current = await tf.loadLayersModel('/model/model.json');
 
         setModelsLoaded(true);
-        // If video is already playing, start predictions now
-        if (videoRef.current && !videoRef.current.paused) {
-          handleVideoPlay();
-        }
       } catch (error) {
         console.error("Failed to load AI models:", error);
         toast({
@@ -233,12 +229,26 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         cancelAnimationFrame(animationFrameId.current);
       }
     };
-  }, [toast, handleVideoPlay]);
+  }, [toast]);
+
+  // This effect will trigger the analysis loop once models are loaded and video is playing
+  useEffect(() => {
+      if (modelsLoaded && videoRef.current && !videoRef.current.paused) {
+          handleVideoPlay();
+      }
+  }, [modelsLoaded, handleVideoPlay]);
+
+  // New effect to update the displayed faces every second
+  useEffect(() => {
+    const faceUpdateInterval = setInterval(() => {
+      setFacesForDisplay([...liveCroppedFaces.current]);
+    }, 1000); // Update every second
+
+    return () => clearInterval(faceUpdateInterval);
+  }, []);
 
   useEffect(() => {
     const dataCaptureInterval = setInterval(async () => {
-      setFacesForDisplay([...liveCroppedFaces]);
-      
       const frameCount = minuteFrameCountRef.current;
       const totalStudents = minuteTotalStudentCountRef.current;
       const totalInterested = minuteTotalInterestedCountRef.current;
@@ -285,7 +295,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     }, 60000); // Save every minute
 
     return () => clearInterval(dataCaptureInterval);
-  }, [toast, liveCroppedFaces, sessionInfo.id]);
+  }, [toast, sessionInfo.id]);
 
   const handleExport = () => {
     const loginInfoRows = [
