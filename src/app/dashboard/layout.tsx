@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Cpu, LogOut, PanelLeft, ShieldCheck, User, Settings, LifeBuoy } from 'lucide-react';
+import { Cpu, LogOut, PanelLeft, ShieldCheck, User, Settings, LifeBuoy, History } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -204,6 +204,12 @@ export default function DashboardLayout({
                     </DropdownMenuItem>
                   </Link>
                 )}
+                <Link href="/dashboard/history" passHref>
+                  <DropdownMenuItem>
+                    <History className="mr-2 h-4 w-4" />
+                    <span>ประวัติการสังเกตการณ์</span>
+                  </DropdownMenuItem>
+                </Link>
                 <DropdownMenuItem onSelect={(e) => {
                   e.preventDefault();
                   handleTriggerClick();
