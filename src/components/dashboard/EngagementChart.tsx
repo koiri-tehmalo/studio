@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { History } from 'lucide-react';
+import { LineChart as LineChartIcon } from 'lucide-react';
 
 interface EngagementData {
     timestamp: string;
@@ -27,14 +27,14 @@ export default function EngagementChart({ data }: EngagementChartProps) {
         <Card className="h-full flex flex-col">
             <CardHeader>
                 <div className="flex items-center gap-2">
-                    <History className="h-5 w-5" />
+                    <LineChartIcon className="h-5 w-5 text-primary" />
                     <CardTitle>กราฟแนวโน้มการมีส่วนร่วม</CardTitle>
                 </div>
                 <CardDescription>แสดงจำนวนนักเรียนที่สนใจและไม่สนใจตลอดช่วงเวลาการสังเกตการณ์</CardDescription>
             </CardHeader>
             <CardContent className="flex-1">
                 <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart
+                    <LineChart
                         data={chartData}
                         margin={{
                             top: 10,
@@ -54,9 +54,9 @@ export default function EngagementChart({ data }: EngagementChartProps) {
                             }}
                         />
                         <Legend />
-                        <Area type="monotone" dataKey="interestedCount" name="สนใจ" stackId="1" stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.6} />
-                        <Area type="monotone" dataKey="uninterestedCount" name="ไม่สนใจ" stackId="1" stroke="hsl(var(--chart-2))" fill="hsl(var(--chart-2))" fillOpacity={0.6}/>
-                    </AreaChart>
+                        <Line type="monotone" dataKey="interestedCount" name="สนใจ" stroke="hsl(var(--chart-1))" strokeWidth={2} />
+                        <Line type="monotone" dataKey="uninterestedCount" name="ไม่สนใจ" stroke="hsl(var(--chart-2))" strokeWidth={2}/>
+                    </LineChart>
                 </ResponsiveContainer>
             </CardContent>
         </Card>
