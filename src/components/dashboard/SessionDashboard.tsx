@@ -56,14 +56,14 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const predictWebcam = useCallback(async () => {
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
     
-    if (!faceLandmarker || !cnnModel || !videoRef.current || !canvasRef.current || videoRef.current.paused || videoRef.current.readyState < 2) {
+    // Ensure all elements are ready before proceeding
+    if (!faceLandmarker || !cnnModel || !video || !canvas || video.readyState < 2) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
-    
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
     
     const results = faceLandmarker.detectForVideo(video, performance.now());
 
@@ -195,6 +195,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
           outputFaceBlendshapes: true,
           runningMode: "VIDEO",
           numFaces: 20,
+          minFaceDetectionConfidence: 0.3,
         });
 
         await tf.setBackend('webgl');
@@ -213,14 +214,14 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
     loadModels();
     
     return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
       if (faceLandmarkerRef.current) {
         faceLandmarkerRef.current.close();
       }
       if (cnnModelRef.current) {
         cnnModelRef.current.dispose();
-      }
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
       }
     };
   }, [toast]);
