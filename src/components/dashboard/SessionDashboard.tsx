@@ -14,6 +14,7 @@ import { useCamera } from '@/providers/camera-provider';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from "firebase/firestore"; 
 import { SessionInfo } from '@/app/dashboard/types';
+import EngagementChart from './EngagementChart';
 
 const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
 
@@ -21,6 +22,16 @@ interface FaceData {
   image: string;
   interested: boolean;
 }
+
+interface PerMinuteData {
+  timestamp: string;
+  personCount: number;
+  interested: string;
+  uninterested: string;
+  interestedCount: number;
+  uninterestedCount: number;
+}
+
 
 export default function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -31,7 +42,7 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
   
   const [modelsLoaded, setModelsLoaded] = useState(false);
-  const [perMinuteData, setPerMinuteData] = useState<any[]>([]);
+  const [perMinuteData, setPerMinuteData] = useState<PerMinuteData[]>([]);
   const { toast } = useToast();
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
@@ -54,13 +65,17 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
   }, [stream]);
   
   const predictWebcam = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    
     const faceLandmarker = faceLandmarkerRef.current;
     const cnnModel = cnnModelRef.current;
-    const video = videoRef.current;
     const canvas = canvasRef.current;
     
-    // Ensure all elements are ready before proceeding
-    if (!faceLandmarker || !cnnModel || !video || !canvas || video.readyState < 2) {
+    if (!faceLandmarker || !cnnModel || !canvas) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
@@ -228,9 +243,14 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
 
   // This effect will trigger the analysis loop once models are loaded and video is playing
   useEffect(() => {
-      if (modelsLoaded && videoRef.current && !videoRef.current.paused) {
-          handleVideoPlay();
-      }
+    const video = videoRef.current;
+    if (modelsLoaded && video && !video.paused) {
+        handleVideoPlay();
+    }
+    // Also re-trigger if models load after video is already playing
+    if (modelsLoaded && video && !video.paused && !animationFrameId.current) {
+        handleVideoPlay();
+    }
   }, [modelsLoaded, handleVideoPlay]);
 
   // New effect to update the displayed faces every 30 seconds
@@ -261,11 +281,13 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
         const uninterestedPercent = avgPersonCount > 0 ? `${Math.round((avgUninterested / avgPersonCount) * 100)}%` : '0%';
         
         const now = new Date();
-        const newDisplayEntry = {
+        const newDisplayEntry: PerMinuteData = {
           timestamp: format(now, 'HH:mm น.'),
           personCount: avgPersonCount,
           interested: interestedPercent,
           uninterested: uninterestedPercent,
+          interestedCount: avgInterested,
+          uninterestedCount: avgUninterested,
         };
 
         setPerMinuteData(prevData => [newDisplayEntry, ...prevData.slice(0, 9)]); 
@@ -490,6 +512,12 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             </CardContent>
           </Card>
         </div>
+
+        {perMinuteData.length > 0 && (
+          <div className="lg:col-span-3">
+            <EngagementChart data={perMinuteData} />
+          </div>
+        )}
       </div>
     </div>
   );
