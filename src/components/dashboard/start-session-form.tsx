@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,13 +27,11 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
 
     useEffect(() => {
         if (userName) {
-            const storedName = localStorage.getItem('observerName');
-            const storedSubject = localStorage.getItem('observerSubject');
-            
-            setObserverName(storedName || userName);
-            if (storedSubject) {
-                setObserverSubject(storedSubject);
-            }
+            setObserverName(userName);
+        }
+        const storedSubject = localStorage.getItem('observerSubject');
+        if (storedSubject) {
+            setObserverSubject(storedSubject);
         }
     }, [userName]);
 
@@ -56,7 +55,6 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
         
         setIsSubmitting(true);
         try {
-          localStorage.setItem('observerName', observerName);
           localStorage.setItem('observerSubject', observerSubject);
           
           const sessionRef = await addDoc(collection(db, "sessions"), {
@@ -105,8 +103,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           id="name"
                           type="text"
                           value={observerName}
-                          onChange={(e) => setObserverName(e.target.value)}
-                          disabled={isSubmitting}
+                          disabled={true}
                           />
                       </div>
                       <div className="space-y-2">
@@ -137,7 +134,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           className="w-full font-bold text-lg"
                           size="lg"
                           onClick={handleStartSession}
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || !observerName}
                       >
                           {isSubmitting ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
                       </Button>
