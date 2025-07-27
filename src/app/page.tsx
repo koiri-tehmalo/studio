@@ -77,7 +77,7 @@ export default function LoginPage() {
           <div className="flex justify-center items-center mb-4">
              <Cpu size={48} className="text-primary" />
           </div>
-          <CardTitle className="text-3xl font-headline">ผู้สังเกตการณ์ห้องเรียน</CardTitle>
+          <CardTitle className="text-3xl font-headline">ระบบตรวจจับอารมณ์จากใบหน้า</CardTitle>
           <CardDescription>กรุณาเข้าสู่ระบบเพื่อเริ่มการใช้งาน</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -98,6 +98,7 @@ export default function LoginPage() {
             <Input
               id="password"
               type="password"
+              placeholder="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}

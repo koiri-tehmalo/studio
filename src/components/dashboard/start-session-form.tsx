@@ -93,7 +93,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
          <div className="flex items-center justify-center h-full">
               <Card className="w-full max-w-lg">
                   <CardHeader>
-                      <CardTitle className="text-2xl font-headline">เริ่มการสังเกตการณ์ใหม่</CardTitle>
+                      <CardTitle className="text-2xl font-headline text-center">เริ่มการการทำงาน</CardTitle>
                       <CardDescription>กรอกข้อมูลเพื่อเริ่มบันทึกและวิเคราะห์เซสชันใหม่</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -136,7 +136,7 @@ export default function StartSessionForm({ onSessionStart }: { onSessionStart: (
                           onClick={handleStartSession}
                           disabled={isSubmitting || !observerName}
                       >
-                          {isSubmitting ? <Loader2 className="animate-spin" /> : 'เริ่มการสังเกตการณ์'}
+                          {isSubmitting ? <Loader2 className="animate-spin" /> : 'เริ่ม'}
                       </Button>
                   </CardContent>
               </Card>

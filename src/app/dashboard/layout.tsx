@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Cpu, LogOut, PanelLeft, ShieldCheck, User, Settings, LifeBuoy, History } from 'lucide-react';
+import { Cpu, LogOut, PanelLeft, ShieldCheck, User, Settings, LifeBuoy, History, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,9 @@ import { Label } from '@/components/ui/label';
 import { CameraProvider, useCamera } from '@/providers/camera-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useRouter, redirect } from 'next/navigation';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useToast } from '@/hooks/use-toast';
 
 function CameraSettingsDialog() {
   const { devices, selectedDeviceId, setSelectedDeviceId } = useCamera();
@@ -122,38 +125,51 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [avatarSrc, setAvatarSrc] = useState('https://placehold.co/40x40.png');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { user, userName, userRole, logout } = useAuth();
+  const { user, userName, userRole, userAvatar, logout, setUserAvatar: setAuthAvatar } = useAuth();
   const router = useRouter();
-
-  useEffect(() => {
-    const savedAvatar = localStorage.getItem('userAvatar');
-    if (savedAvatar) {
-      setAvatarSrc(savedAvatar);
-    }
-  }, []);
+  const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
 
   const handleLogout = async () => {
     await logout();
     router.push('/');
   }
 
-  const handleAvatarChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
+    if (file && user) {
+      setIsUploading(true);
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         if (typeof e.target?.result === 'string') {
           const dataUrl = e.target.result;
-          setAvatarSrc(dataUrl);
-          localStorage.setItem('userAvatar', dataUrl);
+          try {
+            const userDocRef = doc(db, "users", user.uid);
+            await updateDoc(userDocRef, {
+              avatarUrl: dataUrl
+            });
+            setAuthAvatar(dataUrl); // Update avatar in auth context
+            toast({
+              title: 'อัปเดตสำเร็จ',
+              description: 'รูปโปรไฟล์ของคุณถูกเปลี่ยนแล้ว'
+            });
+          } catch (error) {
+            console.error("Error updating avatar:", error);
+            toast({
+              variant: 'destructive',
+              title: 'เกิดข้อผิดพลาด',
+              description: 'ไม่สามารถอัปเดตโปรไฟล์ได้'
+            });
+          } finally {
+            setIsUploading(false);
+          }
         }
       };
       reader.readAsDataURL(file);
     }
   };
-
+  
   const handleTriggerClick = () => {
     fileInputRef.current?.click();
   };
@@ -167,6 +183,7 @@ export default function DashboardLayout({
         onChange={handleAvatarChange}
         className="hidden"
         accept="image/*"
+        disabled={isUploading}
       />
       <div className="flex flex-col h-screen bg-background">
         <header className="flex h-16 shrink-0 items-center justify-between border-b px-6">
@@ -174,7 +191,7 @@ export default function DashboardLayout({
             <Link href="/dashboard" className="flex items-center gap-2">
                 <Cpu className="w-8 h-8 text-primary" />
                 <span className="font-headline text-xl font-semibold text-foreground">
-                  ผู้สังเกตการณ์
+                ระบบตรวจจับอารมณ์จากใบหน้า
                 </span>
             </Link>
           </div>
@@ -188,7 +205,7 @@ export default function DashboardLayout({
                   className="overflow-hidden rounded-full"
                 >
                   <Avatar>
-                    <AvatarImage src={avatarSrc} alt={userName || 'User'} data-ai-hint="user avatar" />
+                    <AvatarImage src={userAvatar || undefined} alt={userName || 'User'} data-ai-hint="user avatar" />
                     <AvatarFallback>{userName ? userName.charAt(0).toUpperCase() : 'U'}</AvatarFallback>
                   </Avatar>
                 </Button>
@@ -213,8 +230,8 @@ export default function DashboardLayout({
                 <DropdownMenuItem onSelect={(e) => {
                   e.preventDefault();
                   handleTriggerClick();
-                }}>
-                  <User className="mr-2 h-4 w-4" />
+                }} disabled={isUploading}>
+                  {isUploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <User className="mr-2 h-4 w-4" />}
                   <span>เปลี่ยนรูปโปรไฟล์</span>
                 </DropdownMenuItem>
                 <CameraSettingsDialog />
