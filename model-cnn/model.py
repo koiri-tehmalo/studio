@@ -30,4 +30,4 @@ test_loss, test_acc = model.evaluate(X_test, y_test, verbose=2)
 print(f"Test accuracy: {test_acc}")
 
 # บันทึกโมเดล
-model.save('model145.h5')
+model.save('model.h5')
