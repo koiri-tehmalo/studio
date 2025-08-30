@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen } from 'lucide-react';
+import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen, PlusCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
@@ -33,7 +34,7 @@ interface PerMinuteData {
 }
 
 
-export default function SessionDashboard({ sessionInfo }: { sessionInfo: SessionInfo }) {
+export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessionInfo: SessionInfo, onSessionEnd: () => void; }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
@@ -361,10 +362,32 @@ export default function SessionDashboard({ sessionInfo }: { sessionInfo: Session
             <h1 className="text-3xl font-bold tracking-tight font-headline">แดชบอร์ดการวิเคราะห์</h1>
             <p className="text-muted-foreground">การวิเคราะห์การมีส่วนร่วมในห้องเรียนแบบเรียลไทม์</p>
         </div>
-        <Button variant="outline" onClick={handleExport} disabled={perMinuteData.length === 0}>
-          <FileDown className="mr-2 h-4 w-4" />
-          ส่งออกเป็น Excel
-        </Button>
+        <div className="flex gap-2">
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button variant="secondary">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      เริ่มเซสชันใหม่
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>คุณแน่ใจหรือไม่?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        การดำเนินการนี้จะสิ้นสุดเซสชันปัจจุบันและกลับไปยังหน้าเริ่มต้น คุณต้องการดำเนินการต่อหรือไม่?
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                    <AlertDialogAction onClick={onSessionEnd}>ดำเนินการต่อ</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            <Button variant="outline" onClick={handleExport} disabled={perMinuteData.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" />
+                ส่งออกเป็น Excel
+            </Button>
+        </div>
       </div>
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

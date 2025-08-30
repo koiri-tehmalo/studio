@@ -181,7 +181,7 @@ export default function AdminPage() {
                 <TableHead>วิชา</TableHead>
                 <TableHead>ผู้สังเกตการณ์</TableHead>
                 <TableHead>วันที่สร้าง</TableHead>
-                <TableHead className="text-right">ดำเนินการ</TableHead>
+                <TableHead /*className="text-right"*/>ดำเนินการ</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

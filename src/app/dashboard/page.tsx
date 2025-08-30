@@ -21,12 +21,17 @@ const SessionDashboard = dynamic(() => import('@/components/dashboard/SessionDas
 export default function DashboardPage() {
   const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const { stream, startStream } = useCamera();
+  const { stream, startStream, stopStream } = useCamera();
 
   const handleSessionStart = async (info: SessionInfo) => {
     setIsStarting(true);
     await startStream(); // Tell the provider to start the camera
     setSessionInfo(info);
+  };
+  
+  const handleSessionEnd = () => {
+    stopStream();
+    setSessionInfo(null);
   };
 
   useEffect(() => {
@@ -57,7 +62,7 @@ export default function DashboardPage() {
       )}
 
       {showDashboard && (
-          <SessionDashboard sessionInfo={sessionInfo!} />
+          <SessionDashboard sessionInfo={sessionInfo!} onSessionEnd={handleSessionEnd} />
       )}
     </div>
   );
