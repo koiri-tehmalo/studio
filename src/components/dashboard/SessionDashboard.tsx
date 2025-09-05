@@ -9,20 +9,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import { FileDown, Smile, Meh, Users, Loader2, User, BookOpen, PlusCircle } from 'lucide-react';
 import { format } from 'date-fns';
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
-import * as tf from '@tensorflow/tfjs';
 import { useCamera } from '@/providers/camera-provider';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from "firebase/firestore"; 
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { SessionInfo } from '@/app/dashboard/types';
 import EngagementChart from './EngagementChart';
+import { useEmotionAnalyzer, AnalysisResult, FaceData } from '@/hooks/use-emotion-analyzer';
 
 const EMOTION_CLASSES = ['ไม่สนใจ', 'สนใจ'];
-
-interface FaceData {
-  image: string;
-  interested: boolean;
-}
 
 interface PerMinuteData {
   timestamp: string;
@@ -38,11 +32,7 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number>();
-  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
-  const cnnModelRef = useRef<tf.LayersModel | null>(null);
-  const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
   
-  const [modelsLoaded, setModelsLoaded] = useState(false);
   const [perMinuteData, setPerMinuteData] = useState<PerMinuteData[]>([]);
   const { toast } = useToast();
 
@@ -57,6 +47,7 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading } = useCamera();
+  const { modelsLoaded, analyzeFrame } = useEmotionAnalyzer();
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -67,92 +58,29 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   
   const predictWebcam = useCallback(async () => {
     const video = videoRef.current;
-    if (!video || video.readyState < 2) {
+    if (!video || video.readyState < 2 || !modelsLoaded) {
       animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
-    
-    const faceLandmarker = faceLandmarkerRef.current;
-    const cnnModel = cnnModelRef.current;
-    const canvas = canvasRef.current;
-    
-    if (!faceLandmarker || !cnnModel || !canvas) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
-      return;
-    }
-    
-    const results = faceLandmarker.detectForVideo(video, performance.now());
 
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      animationFrameId.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    
+    const analysisResults = await analyzeFrame(video);
+    
     const ctx = canvas.getContext('2d');
-    if (ctx && results.faceLandmarks) {
+    if (ctx && analysisResults) {
       canvas.width = video.clientWidth;
       canvas.height = video.clientHeight;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      let currentInterested = 0;
-      const faceImages: FaceData[] = [];
+      let currentInterested = analysisResults.filter(r => r.isInterested).length;
 
-      for (let i = 0; i < results.faceLandmarks.length; i++) {
-        const landmarks = results.faceLandmarks[i];
-        
-        let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
-        for (const landmark of landmarks) {
-            minX = Math.min(minX, landmark.x * video.videoWidth);
-            maxX = Math.max(maxX, landmark.x * video.videoWidth);
-            minY = Math.min(minY, landmark.y * video.videoHeight);
-            maxY = Math.max(maxY, landmark.y * video.videoHeight);
-        }
-        const padding = 20;
-
-        let x = minX - padding;
-        let y = minY - padding;
-        let width = (maxX - minX) + (padding * 2);
-        let height = (maxY - minY) + (padding * 2);
-
-        const clampedX = Math.max(0, x);
-        const clampedY = Math.max(0, y);
-        const clampedWidth = Math.min(width, video.videoWidth - clampedX);
-        const clampedHeight = Math.min(height, video.videoHeight - clampedY);
-
-        const box = {
-            x: clampedX,
-            y: clampedY,
-            width: clampedWidth,
-            height: clampedHeight
-        };
-        
-        const isInterested = await tf.tidy(() => {
-          if (box.width <= 0 || box.height <= 0) return false;
-          const faceImage = tf.browser.fromPixels(video)
-            .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
-            .resizeBilinear([48, 48])
-            .mean(2)
-            .toFloat()
-            .div(tf.scalar(255.0))
-            .expandDims(0)
-            .expandDims(-1);
-          
-          const prediction = cnnModel.predict(faceImage) as tf.Tensor;
-          const [uninterestedScore, interestedScore] = prediction.dataSync();
-          return interestedScore > uninterestedScore;
-        });
-
-        if (isInterested) {
-          currentInterested++;
-        }
-        
-        if (tempCanvasRef.current && box.width > 0 && box.height > 0) {
-            const tempCtx = tempCanvasRef.current.getContext('2d');
-            if (tempCtx) {
-                tempCanvasRef.current.width = box.width;
-                tempCanvasRef.current.height = box.height;
-                tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-                faceImages.push({
-                  image: tempCanvasRef.current.toDataURL(),
-                  interested: isInterested,
-                });
-            }
-        }
+      for (const result of analysisResults) {
+        const { box, isInterested } = result;
 
         const canvasX = box.x * (canvas.width / video.videoWidth);
         const canvasY = box.y * (canvas.height / video.videoHeight);
@@ -176,18 +104,18 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
-      liveCroppedFaces.current = faceImages;
-      setRealtimeStudentCount(results.faceLandmarks.length);
+      liveCroppedFaces.current = analysisResults.map(r => ({ image: r.imageDataUrl, interested: r.isInterested }));
+      setRealtimeStudentCount(analysisResults.length);
       setInterestedCount(currentInterested);
       
       minuteFrameCountRef.current++;
-      minuteTotalStudentCountRef.current += results.faceLandmarks.length;
+      minuteTotalStudentCountRef.current += analysisResults.length;
       minuteTotalInterestedCountRef.current += currentInterested;
     }
     
     animationFrameId.current = requestAnimationFrame(predictWebcam);
     
-  }, [modelsLoaded]);
+  }, [modelsLoaded, analyzeFrame]);
 
   const handleVideoPlay = useCallback(() => {
     if (modelsLoaded) {
@@ -196,54 +124,7 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   }, [modelsLoaded, predictWebcam]);
   
   useEffect(() => {
-    tempCanvasRef.current = document.createElement('canvas');
-
-    const loadModels = async () => {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
-        );
-        faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-            delegate: "GPU",
-          },
-          outputFaceBlendshapes: true,
-          runningMode: "VIDEO",
-          numFaces: 20,
-          minFaceDetectionConfidence: 0.3,
-        });
-
-        await tf.setBackend('webgl');
-        cnnModelRef.current = await tf.loadLayersModel('/model/model.json');
-
-        setModelsLoaded(true);
-      } catch (error) {
-        console.error("Failed to load AI models:", error);
-        toast({
-          variant: 'destructive',
-          title: 'ไม่สามารถโหลดโมเดล AI',
-          description: 'โปรดรีเฟรชหน้าเว็บ หรือตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',
-        });
-      }
-    };
-    loadModels();
-    
-    return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-      if (faceLandmarkerRef.current) {
-        faceLandmarkerRef.current.close();
-      }
-      if (cnnModelRef.current) {
-        cnnModelRef.current.dispose();
-      }
-    };
-  }, [toast]);
-
-  // This effect will trigger the analysis loop once models are loaded and video is playing
-  useEffect(() => {
+    // This effect will trigger the analysis loop once models are loaded and video is playing
     const video = videoRef.current;
     if (modelsLoaded && video && !video.paused) {
         handleVideoPlay();
@@ -251,6 +132,12 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
     // Also re-trigger if models load after video is already playing
     if (modelsLoaded && video && !video.paused && !animationFrameId.current) {
         handleVideoPlay();
+    }
+    
+    return () => {
+        if (animationFrameId.current) {
+            cancelAnimationFrame(animationFrameId.current);
+        }
     }
   }, [modelsLoaded, handleVideoPlay]);
 
