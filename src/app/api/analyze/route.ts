@@ -39,6 +39,11 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('Error in API route:', error);
+    // Check if it's a fetch error (e.g., connection refused)
+    if (error instanceof TypeError && error.message.includes('fetch failed')) {
+        return NextResponse.json({ error: 'Failed to connect to the analysis backend. Is the Python server running?' }, { status: 503 });
+    }
+
     let errorMessage = 'Internal Server Error';
     if (error instanceof Error) {
         errorMessage = error.message;

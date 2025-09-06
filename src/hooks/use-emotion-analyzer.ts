@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useToast } from '@/hooks/use-toast';
 
 // =================================================================
 // Interfaces and Types
@@ -32,6 +33,8 @@ export interface FaceData {
 export function useEmotionAnalyzer() {
     const [modelsLoaded, setModelsLoaded] = useState(true); // No models to load on client anymore
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const { toast } = useToast();
+    const errorToastDisplayed = useRef(false);
     
     useEffect(() => {
         // This canvas is used for capturing the frame to send to the backend.
@@ -69,11 +72,23 @@ export function useEmotionAnalyzer() {
             });
 
             if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`Error from backend: ${response.status} ${errorText}`);
+                const errorData = await response.json();
+                const errorMessage = errorData.error || `Error: ${response.status}`;
+                console.error(`Error from backend: ${errorMessage}`);
+                
+                if (!errorToastDisplayed.current) {
+                    toast({
+                        variant: 'destructive',
+                        title: 'เกิดข้อผิดพลาดในการเชื่อมต่อ',
+                        description: errorMessage,
+                    });
+                    errorToastDisplayed.current = true; // Set flag to true after showing toast
+                }
                 return [];
             }
             
+            errorToastDisplayed.current = false; // Reset on successful call
+
             // 3. Return the analysis result from the backend
             const results: AnalysisResult[] = await response.json();
 
@@ -86,10 +101,18 @@ export function useEmotionAnalyzer() {
 
         } catch (error) {
             console.error("Failed to send frame for analysis:", error);
+            if (!errorToastDisplayed.current) {
+                toast({
+                    variant: 'destructive',
+                    title: 'เกิดข้อผิดพลาด',
+                    description: 'ไม่สามารถส่งข้อมูลไปวิเคราะห์ได้ โปรดตรวจสอบ Console',
+                });
+                errorToastDisplayed.current = true;
+            }
             return [];
         }
 
-    }, []);
+    }, [toast]);
 
     return { modelsLoaded, analyzeFrame };
 }
