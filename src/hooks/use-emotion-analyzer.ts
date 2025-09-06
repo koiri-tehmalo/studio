@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { FaceLandmarker, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useToast } from './use-toast';
 
@@ -32,7 +32,7 @@ export interface FaceData {
 export function useEmotionAnalyzer() {
     const { toast } = useToast();
     const [modelsLoaded, setModelsLoaded] = useState(false);
-    const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
+    const faceDetectorRef = useRef<FaceDetector | null>(null);
     const cnnModelRef = useRef<tf.LayersModel | null>(null);
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -45,15 +45,13 @@ export function useEmotionAnalyzer() {
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
                 );
-                faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
+                faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.task`,
                         delegate: "GPU",
                     },
-                    outputFaceBlendshapes: true,
                     runningMode: "VIDEO",
-                    numFaces: 20,
-                    minFaceDetectionConfidence: 0.3,
+                    minDetectionConfidence: 0.4,
                 });
 
                 await tf.setBackend('webgl');
@@ -73,8 +71,8 @@ export function useEmotionAnalyzer() {
 
         // Cleanup function
         return () => {
-            if (faceLandmarkerRef.current) {
-                faceLandmarkerRef.current.close();
+            if (faceDetectorRef.current) {
+                faceDetectorRef.current.close();
             }
             if (cnnModelRef.current) {
                 cnnModelRef.current.dispose();
@@ -84,34 +82,25 @@ export function useEmotionAnalyzer() {
 
     // Main analysis function
     const analyzeFrame = useCallback(async (video: HTMLVideoElement): Promise<AnalysisResult[]> => {
-        const faceLandmarker = faceLandmarkerRef.current;
+        const faceDetector = faceDetectorRef.current;
         const cnnModel = cnnModelRef.current;
         const tempCanvas = tempCanvasRef.current;
 
-        if (!faceLandmarker || !cnnModel || !tempCanvas) {
+        if (!faceDetector || !cnnModel || !tempCanvas) {
             return [];
         }
 
-        const results = faceLandmarker.detectForVideo(video, performance.now());
+        const results = faceDetector.detectForVideo(video, performance.now());
         const analysisResults: AnalysisResult[] = [];
 
-        if (results.faceLandmarks) {
-             for (const landmarks of results.faceLandmarks) {
-                let minX = video.videoWidth, minY = video.videoHeight, maxX = 0, maxY = 0;
-                for (const landmark of landmarks) {
-                    minX = Math.min(minX, landmark.x * video.videoWidth);
-                    maxX = Math.max(maxX, landmark.x * video.videoWidth);
-                    minY = Math.min(minY, landmark.y * video.videoHeight);
-                    maxY = Math.max(maxY, landmark.y * video.videoHeight);
-                }
-                const padding = 20;
-                const x = Math.max(0, minX - padding);
-                const y = Math.max(0, minY - padding);
-                const width = Math.min(video.videoWidth - x, (maxX - minX) + (padding * 2));
-                const height = Math.min(video.videoHeight - y, (maxY - minY) + (padding * 2));
+        if (results.detections) {
+             for (const detection of results.detections) {
+                if (!detection.boundingBox) continue;
 
-                const box: BoundingBox = { x, y, width, height };
-
+                // Directly use the boundingBox from the detector
+                const { originX, originY, width, height } = detection.boundingBox;
+                const box: BoundingBox = { x: originX, y: originY, width, height };
+                
                 if (box.width <= 0 || box.height <= 0) continue;
 
                 const isInterested = await tf.tidy(() => {
