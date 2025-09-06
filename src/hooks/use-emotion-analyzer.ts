@@ -33,8 +33,7 @@ export interface FaceData {
 export function useEmotionAnalyzer() {
     const { toast } = useToast();
     const [modelsLoaded, setModelsLoaded] = useState(false);
-    const faceDetectorForVideoRef = useRef<FaceDetector | null>(null);
-    const faceDetectorForImageRef = useRef<FaceDetector | null>(null);
+    const faceDetectorRef = useRef<FaceDetector | null>(null);
     const cnnModelRef = useRef<tf.LayersModel | null>(null);
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -48,23 +47,12 @@ export function useEmotionAnalyzer() {
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
                 );
 
-                // Create a detector for VIDEO mode
-                faceDetectorForVideoRef.current = await FaceDetector.createFromOptions(vision, {
+                faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
                     runningMode: 'VIDEO',
-                    minDetectionConfidence: 0.6,
-                });
-
-                // Create a detector for IMAGE mode
-                faceDetectorForImageRef.current = await FaceDetector.createFromOptions(vision, {
-                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
-                        delegate: "GPU",
-                    },
-                    runningMode: 'IMAGE',
                     minDetectionConfidence: 0.6,
                 });
 
@@ -85,11 +73,8 @@ export function useEmotionAnalyzer() {
 
         // Cleanup function
         return () => {
-            if (faceDetectorForVideoRef.current) {
-                faceDetectorForVideoRef.current.close();
-            }
-             if (faceDetectorForImageRef.current) {
-                faceDetectorForImageRef.current.close();
+            if (faceDetectorRef.current) {
+                faceDetectorRef.current.close();
             }
             if (cnnModelRef.current) {
                 cnnModelRef.current.dispose();
@@ -98,9 +83,8 @@ export function useEmotionAnalyzer() {
     }, [toast]);
 
     // Main analysis function
-    const analyzeFrame = useCallback(async (sourceElement: HTMLVideoElement | HTMLImageElement): Promise<AnalysisResult[]> => {
-        const isVideo = sourceElement instanceof HTMLVideoElement;
-        const faceDetector = isVideo ? faceDetectorForVideoRef.current : faceDetectorForImageRef.current;
+    const analyzeFrame = useCallback(async (videoElement: HTMLVideoElement): Promise<AnalysisResult[]> => {
+        const faceDetector = faceDetectorRef.current;
         const cnnModel = cnnModelRef.current;
         const tempCanvas = tempCanvasRef.current;
 
@@ -108,14 +92,10 @@ export function useEmotionAnalyzer() {
             return [];
         }
 
-        // Use detectForVideo for video and detect for image
-        const results = isVideo
-            ? faceDetector.detectForVideo(sourceElement, performance.now())
-            : faceDetector.detect(sourceElement);
-
+        const results = faceDetector.detectForVideo(videoElement, performance.now());
         const analysisResults: AnalysisResult[] = [];
-        const sourceWidth = isVideo ? sourceElement.videoWidth : sourceElement.naturalWidth;
-        const sourceHeight = isVideo ? sourceElement.videoHeight : sourceElement.naturalHeight;
+        const sourceWidth = videoElement.videoWidth;
+        const sourceHeight = videoElement.videoHeight;
 
         if (results.detections) {
              for (const detection of results.detections) {
@@ -140,7 +120,7 @@ export function useEmotionAnalyzer() {
                 if (box.width <= 0 || box.height <= 0) continue;
 
                 const isInterested = await tf.tidy(() => {
-                    const faceImage = tf.browser.fromPixels(sourceElement)
+                    const faceImage = tf.browser.fromPixels(videoElement)
                         .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
                         .resizeBilinear([48, 48])
                         .mean(2)
@@ -159,7 +139,7 @@ export function useEmotionAnalyzer() {
                 if (tempCtx) {
                     tempCanvas.width = box.width;
                     tempCanvas.height = box.height;
-                    tempCtx.drawImage(sourceElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                    tempCtx.drawImage(videoElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
                     imageDataUrl = tempCanvas.toDataURL();
                 }
 
