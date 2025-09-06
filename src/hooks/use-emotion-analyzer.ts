@@ -39,6 +39,7 @@ export function useEmotionAnalyzer() {
 
     // Effect for loading models
     useEffect(() => {
+        // This canvas is used for both upscaling and cropping.
         tempCanvasRef.current = document.createElement('canvas');
 
         const loadModels = async () => {
@@ -49,11 +50,11 @@ export function useEmotionAnalyzer() {
 
                 faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_full_range/float16/1/blaze_face_full_range.tflite",
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
                     runningMode: 'VIDEO',
-                    minDetectionConfidence: 0.6,
+                    minDetectionConfidence: 0.5, // Lowered to detect smaller faces
                 });
 
                 await tf.setBackend('webgl');
@@ -92,8 +93,20 @@ export function useEmotionAnalyzer() {
             return [];
         }
 
-        const results = faceDetector.detectForVideo(videoElement, performance.now());
+        const scaleFactor = 1.5;
+        const upscaledWidth = videoElement.videoWidth * scaleFactor;
+        const upscaledHeight = videoElement.videoHeight * scaleFactor;
+        const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
+        if (!tempCtx) return [];
+
+        tempCanvas.width = upscaledWidth;
+        tempCanvas.height = upscaledHeight;
+        tempCtx.drawImage(videoElement, 0, 0, upscaledWidth, upscaledHeight);
+
+        const results = faceDetector.detectForVideo(tempCanvas, performance.now());
         const analysisResults: AnalysisResult[] = [];
+        
+        // Original dimensions for cropping and bounding box scaling
         const sourceWidth = videoElement.videoWidth;
         const sourceHeight = videoElement.videoHeight;
 
@@ -103,13 +116,15 @@ export function useEmotionAnalyzer() {
 
                 const { originX, originY, width, height } = detection.boundingBox;
                 
+                // Scale the bounding box back to the original video dimensions
                 let box: BoundingBox = { 
-                    x: Math.max(0, originX), 
-                    y: Math.max(0, originY), 
-                    width, 
-                    height 
+                    x: Math.max(0, originX / scaleFactor), 
+                    y: Math.max(0, originY / scaleFactor), 
+                    width: width / scaleFactor, 
+                    height: height / scaleFactor 
                 };
 
+                // Clamp the box to the original video dimensions
                 if (box.x + box.width > sourceWidth) {
                     box.width = sourceWidth - box.x;
                 }
@@ -120,6 +135,7 @@ export function useEmotionAnalyzer() {
                 if (box.width <= 0 || box.height <= 0) continue;
 
                 const isInterested = await tf.tidy(() => {
+                    // Crop from the original video element for prediction
                     const faceImage = tf.browser.fromPixels(videoElement)
                         .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
                         .resizeBilinear([48, 48])
@@ -135,12 +151,15 @@ export function useEmotionAnalyzer() {
                 });
                 
                 let imageDataUrl = '';
-                const tempCtx = tempCanvas.getContext('2d');
-                if (tempCtx) {
-                    tempCanvas.width = box.width;
-                    tempCanvas.height = box.height;
-                    tempCtx.drawImage(videoElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
-                    imageDataUrl = tempCanvas.toDataURL();
+                // Use a different canvas or clear and resize for cropping to get data URL
+                const cropCanvas = document.createElement('canvas');
+                const cropCtx = cropCanvas.getContext('2d');
+                if (cropCtx) {
+                    cropCanvas.width = box.width;
+                    cropCanvas.height = box.height;
+                    // Crop from the original video element
+                    cropCtx.drawImage(videoElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                    imageDataUrl = cropCanvas.toDataURL();
                 }
 
                 analysisResults.push({ box, isInterested, imageDataUrl });
