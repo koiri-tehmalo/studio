@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Loader2, TestTube, Upload, Camera, Users, Smile, Meh } from 'lucide-react';
 import { useCamera } from '@/providers/camera-provider';
-import { useEmotionAnalyzer, AnalysisResult } from '@/hooks/use-emotion-analyzer';
+import { useEmotionAnalyzer, AnalysisResult, FaceData } from '@/hooks/use-emotion-analyzer';
 import { useAuth } from '@/providers/auth-provider';
 import { useRouter } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -21,6 +21,9 @@ export default function TestDetectionPage() {
   const imageRef = useRef<HTMLImageElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const animationFrameId = useRef<number>();
+  
+  const liveCroppedFaces = useRef<FaceData[]>([]);
+  const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
 
   const [activeTab, setActiveTab] = useState('camera');
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
@@ -114,6 +117,8 @@ export default function TestDetectionPage() {
 
     const currentAnalysisResults = await analyzeFrame(video);
     setAnalysisResults(currentAnalysisResults); // Set results for stats cards
+    liveCroppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl, interested: r.isInterested }));
+
     const ctx = canvas.getContext('2d');
 
     if (ctx && currentAnalysisResults) {
@@ -124,6 +129,16 @@ export default function TestDetectionPage() {
 
     animationFrameId.current = requestAnimationFrame(predictWebcam);
   }, [modelsLoaded, analyzeFrame, activeTab, drawResults]);
+  
+   // Effect to update the displayed faces every few seconds
+  useEffect(() => {
+    const faceUpdateInterval = setInterval(() => {
+      setFacesForDisplay([...liveCroppedFaces.current]);
+    }, 5000); // Update every 5 seconds
+
+    return () => clearInterval(faceUpdateInterval);
+  }, []);
+
 
   const handleVideoPlay = useCallback(() => {
     if (modelsLoaded && activeTab === 'camera') {
@@ -150,6 +165,7 @@ export default function TestDetectionPage() {
       reader.onload = (e) => {
         setUploadedImage(e.target?.result as string);
         setAnalysisResults([]); // Clear previous results
+        setFacesForDisplay([]); // Clear faces display
       };
       reader.readAsDataURL(file);
     }
@@ -164,6 +180,8 @@ export default function TestDetectionPage() {
       
       const results = await analyzeFrame(image); // Directly analyze the image
       setAnalysisResults(results);
+      setFacesForDisplay(results.map(r => ({ image: r.imageDataUrl, interested: r.isInterested })));
+
 
       const ctx = canvas.getContext('2d');
       if (ctx) {
@@ -239,7 +257,26 @@ export default function TestDetectionPage() {
                 <TabsTrigger value="image"><Upload className="mr-2"/>อัปโหลดรูปภาพ</TabsTrigger>
               </TabsList>
               <TabsContent value="camera">
-                  <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center mt-4">
+                <div className="mt-4 flex flex-col gap-4">
+                  <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
+                    {facesForDisplay.length > 0 ? (
+                      facesForDisplay.map((faceData, index) => (
+                        <img
+                          key={index}
+                          src={faceData.image}
+                          alt={`Cropped face ${index + 1}`}
+                          className={`inline-block h-full w-auto rounded-md mr-2 border-4 ${
+                            faceData.interested ? 'border-green-400' : 'border-red-400'
+                          }`}
+                        />
+                      ))
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                        รอการตรวจจับใบหน้า...
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
                     <video ref={videoRef} onPlay={handleVideoPlay} className="w-full h-full object-cover" autoPlay muted playsInline />
                     <canvas ref={canvasRef} className="absolute top-0 left-0" />
                     {showCameraLoadingOverlay && (
@@ -249,6 +286,7 @@ export default function TestDetectionPage() {
                       </div>
                     )}
                   </div>
+                </div>
                    {hasCameraPermission === false && (
                     <Alert variant="destructive" className="w-full mt-4">
                       <AlertTitle>จำเป็นต้องเข้าถึงกล้อง</AlertTitle>
@@ -271,19 +309,39 @@ export default function TestDetectionPage() {
                        <Upload className="mr-2 h-4 w-4" />
                        เลือกรูปภาพ
                     </Button>
-                    <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
-                      {uploadedImage ? (
-                        <img ref={imageRef} src={uploadedImage} alt="Uploaded for analysis" className="max-w-full max-h-full object-contain"/>
-                      ) : (
-                        <p className="text-muted-foreground">กรุณาเลือกรูปภาพเพื่อเริ่มการวิเคราะห์</p>
-                      )}
-                      <canvas ref={canvasRef} className="absolute top-0 left-0" />
-                      {showImageLoadingOverlay && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
-                            <Loader2 className="h-8 w-8 animate-spin mb-2" />
-                            <p>{loadingText}</p>
+                    <div className="mt-4 w-full flex flex-col gap-4">
+                       <div className="w-full bg-muted rounded-lg p-2 h-24 overflow-x-auto whitespace-nowrap">
+                        {facesForDisplay.length > 0 ? (
+                          facesForDisplay.map((faceData, index) => (
+                            <img
+                              key={index}
+                              src={faceData.image}
+                              alt={`Cropped face ${index + 1}`}
+                              className={`inline-block h-full w-auto rounded-md mr-2 border-4 ${
+                                faceData.interested ? 'border-green-400' : 'border-red-400'
+                              }`}
+                            />
+                          ))
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                            ผลลัพธ์ใบหน้าจะแสดงที่นี่
                           </div>
-                      )}
+                        )}
+                      </div>
+                      <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center">
+                        {uploadedImage ? (
+                          <img ref={imageRef} src={uploadedImage} alt="Uploaded for analysis" className="max-w-full max-h-full object-contain"/>
+                        ) : (
+                          <p className="text-muted-foreground">กรุณาเลือกรูปภาพเพื่อเริ่มการวิเคราะห์</p>
+                        )}
+                        <canvas ref={canvasRef} className="absolute top-0 left-0" />
+                        {showImageLoadingOverlay && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 text-white">
+                              <Loader2 className="h-8 w-8 animate-spin mb-2" />
+                              <p>{loadingText}</p>
+                            </div>
+                        )}
+                      </div>
                     </div>
                 </div>
               </TabsContent>
