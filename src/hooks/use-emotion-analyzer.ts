@@ -52,7 +52,7 @@ export function useEmotionAnalyzer() {
                         delegate: "GPU",
                     },
                     runningMode: "VIDEO",
-                    minDetectionConfidence: 0.4,
+                    minDetectionConfidence: 0.6,
                 });
 
                 await tf.setBackend('webgl');
