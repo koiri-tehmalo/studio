@@ -162,29 +162,29 @@ export default function TestDetectionPage() {
 
       setIsAnalyzingImage(true);
       
-      const video = document.createElement('video');
-      video.src = image.src;
-      video.width = image.naturalWidth;
-      video.height = image.naturalHeight;
-      
-      video.onloadeddata = async () => {
-        const results = await analyzeFrame(video);
-        setAnalysisResults(results);
+      const results = await analyzeFrame(image); // Directly analyze the image
+      setAnalysisResults(results);
 
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          canvas.width = image.clientWidth;
-          canvas.height = image.clientHeight;
-          drawResults(ctx, image, results);
-        }
-        setIsAnalyzingImage(false);
-      };
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        canvas.width = image.clientWidth;
+        canvas.height = image.clientHeight;
+        drawResults(ctx, image, results);
+      }
+      setIsAnalyzingImage(false);
 
   }, [modelsLoaded, uploadedImage, analyzeFrame, drawResults]);
   
   useEffect(() => {
     if (uploadedImage && imageRef.current && modelsLoaded) {
-      setTimeout(analyzeUploadedImage, 100);
+      // Analyze when the image element has loaded its source
+      imageRef.current.onload = () => {
+        analyzeUploadedImage();
+      };
+      // If image is already loaded (e.g. from cache), analyze immediately
+      if (imageRef.current.complete) {
+        analyzeUploadedImage();
+      }
     }
   }, [uploadedImage, modelsLoaded, analyzeUploadedImage]);
 

@@ -82,7 +82,7 @@ export function useEmotionAnalyzer() {
     }, [toast]);
 
     // Main analysis function
-    const analyzeFrame = useCallback(async (video: HTMLVideoElement): Promise<AnalysisResult[]> => {
+    const analyzeFrame = useCallback(async (sourceElement: HTMLVideoElement | HTMLImageElement): Promise<AnalysisResult[]> => {
         const faceDetector = faceDetectorRef.current;
         const cnnModel = cnnModelRef.current;
         const tempCanvas = tempCanvasRef.current;
@@ -90,9 +90,17 @@ export function useEmotionAnalyzer() {
         if (!faceDetector || !cnnModel || !tempCanvas) {
             return [];
         }
+        
+        const isVideo = sourceElement instanceof HTMLVideoElement;
 
-        const results = faceDetector.detectForVideo(video, performance.now());
+        // Use detectForVideo for video and detect for image
+        const results = isVideo 
+            ? faceDetector.detectForVideo(sourceElement, performance.now())
+            : faceDetector.detect(sourceElement);
+            
         const analysisResults: AnalysisResult[] = [];
+        const sourceWidth = isVideo ? sourceElement.videoWidth : sourceElement.naturalWidth;
+        const sourceHeight = isVideo ? sourceElement.videoHeight : sourceElement.naturalHeight;
 
         if (results.detections) {
              for (const detection of results.detections) {
@@ -109,17 +117,17 @@ export function useEmotionAnalyzer() {
                 };
 
                 // Clamp width and height to be within video boundaries
-                if (box.x + box.width > video.videoWidth) {
-                    box.width = video.videoWidth - box.x;
+                if (box.x + box.width > sourceWidth) {
+                    box.width = sourceWidth - box.x;
                 }
-                if (box.y + box.height > video.videoHeight) {
-                    box.height = video.videoHeight - box.y;
+                if (box.y + box.height > sourceHeight) {
+                    box.height = sourceHeight - box.y;
                 }
                 
                 if (box.width <= 0 || box.height <= 0) continue;
 
                 const isInterested = await tf.tidy(() => {
-                    const faceImage = tf.browser.fromPixels(video)
+                    const faceImage = tf.browser.fromPixels(sourceElement)
                         .slice([Math.round(box.y), Math.round(box.x)], [Math.round(box.height), Math.round(box.width)])
                         .resizeBilinear([48, 48])
                         .mean(2)
@@ -138,7 +146,7 @@ export function useEmotionAnalyzer() {
                 if (tempCtx) {
                     tempCanvas.width = box.width;
                     tempCanvas.height = box.height;
-                    tempCtx.drawImage(video, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
+                    tempCtx.drawImage(sourceElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
                     imageDataUrl = tempCanvas.toDataURL();
                 }
 
