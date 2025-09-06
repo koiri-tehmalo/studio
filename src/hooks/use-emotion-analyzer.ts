@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceLandmarker, FilesetResolver, NormalizedLandmark } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useToast } from './use-toast';
 
@@ -33,7 +33,7 @@ export interface FaceData {
 export function useEmotionAnalyzer() {
     const { toast } = useToast();
     const [modelsLoaded, setModelsLoaded] = useState(false);
-    const faceDetectorRef = useRef<FaceDetector | null>(null);
+    const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
     const cnnModelRef = useRef<tf.LayersModel | null>(null);
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -48,13 +48,13 @@ export function useEmotionAnalyzer() {
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
                 );
 
-                faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
+                faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
                         delegate: "GPU",
                     },
                     runningMode: 'VIDEO',
-                    minDetectionConfidence: 0.5,
+                    numFaces: 10, // Allow detecting multiple faces
                 });
 
                 await tf.setBackend('webgl');
@@ -74,8 +74,8 @@ export function useEmotionAnalyzer() {
 
         // Cleanup function
         return () => {
-            if (faceDetectorRef.current) {
-                faceDetectorRef.current.close();
+            if (faceLandmarkerRef.current) {
+                faceLandmarkerRef.current.close();
             }
             if (cnnModelRef.current) {
                 cnnModelRef.current.dispose();
@@ -83,17 +83,47 @@ export function useEmotionAnalyzer() {
         };
     }, [toast]);
 
+    const calculateBoundingBox = (landmarks: NormalizedLandmark[], imageWidth: number, imageHeight: number): BoundingBox | null => {
+        if (!landmarks || landmarks.length === 0) return null;
+
+        let minX = imageWidth, maxX = 0, minY = imageHeight, maxY = 0;
+
+        for (const landmark of landmarks) {
+            const px = landmark.x * imageWidth;
+            const py = landmark.y * imageHeight;
+            minX = Math.min(minX, px);
+            maxX = Math.max(maxX, px);
+            minY = Math.min(minY, py);
+            maxY = Math.max(maxY, py);
+        }
+        
+        // Add some padding to the bounding box
+        const paddingX = (maxX - minX) * 0.1;
+        const paddingY = (maxY - minY) * 0.2;
+        
+        minX = Math.max(0, minX - paddingX);
+        maxX = Math.min(imageWidth, maxX + paddingX);
+        minY = Math.max(0, minY - paddingY);
+        maxY = Math.min(imageHeight, maxY + paddingY);
+
+
+        if (maxX > minX && maxY > minY) {
+             return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+        }
+        return null;
+    }
+
     // Main analysis function
     const analyzeFrame = useCallback(async (videoElement: HTMLVideoElement): Promise<AnalysisResult[]> => {
-        const faceDetector = faceDetectorRef.current;
+        const faceLandmarker = faceLandmarkerRef.current;
         const cnnModel = cnnModelRef.current;
         const tempCanvas = tempCanvasRef.current;
 
-        if (!faceDetector || !cnnModel || !tempCanvas) {
+        if (!faceLandmarker || !cnnModel || !tempCanvas) {
             return [];
         }
 
-        const scaleFactor = 1.5;
+        const scaleFactor = 1.0; // No upscale needed with landmarker, can be adjusted if needed
         const upscaledWidth = videoElement.videoWidth * scaleFactor;
         const upscaledHeight = videoElement.videoHeight * scaleFactor;
         const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
@@ -103,25 +133,23 @@ export function useEmotionAnalyzer() {
         tempCanvas.height = upscaledHeight;
         tempCtx.drawImage(videoElement, 0, 0, upscaledWidth, upscaledHeight);
 
-        const results = faceDetector.detectForVideo(tempCanvas, performance.now());
+        const results = faceLandmarker.detectForVideo(tempCanvas, performance.now());
         const analysisResults: AnalysisResult[] = [];
         
-        // Original dimensions for cropping and bounding box scaling
         const sourceWidth = videoElement.videoWidth;
         const sourceHeight = videoElement.videoHeight;
 
-        if (results.detections) {
-             for (const detection of results.detections) {
-                if (!detection.boundingBox) continue;
+        if (results.faceLandmarks) {
+             for (const landmarks of results.faceLandmarks) {
+                const rawBox = calculateBoundingBox(landmarks, upscaledWidth, upscaledHeight);
+                if (!rawBox) continue;
 
-                const { originX, originY, width, height } = detection.boundingBox;
-                
                 // Scale the bounding box back to the original video dimensions
                 let box: BoundingBox = { 
-                    x: Math.max(0, originX / scaleFactor), 
-                    y: Math.max(0, originY / scaleFactor), 
-                    width: width / scaleFactor, 
-                    height: height / scaleFactor 
+                    x: Math.max(0, rawBox.x / scaleFactor), 
+                    y: Math.max(0, rawBox.y / scaleFactor), 
+                    width: rawBox.width / scaleFactor, 
+                    height: rawBox.height / scaleFactor 
                 };
 
                 // Clamp the box to the original video dimensions
@@ -138,18 +166,18 @@ export function useEmotionAnalyzer() {
                 const MIN_FACE_SIZE_PIXELS = 20;
                 const MAX_FACE_SIZE_PIXELS = sourceHeight; // Max face size can be the height of the video
                 const MIN_ASPECT_RATIO = 0.7;
-                const MAX_ASPECT_RATIO = 1.3;
+                const MAX_ASPECT_RATIO = 1.4; // Slightly more lenient for tilted heads
 
                 if (
                     box.width < MIN_FACE_SIZE_PIXELS || box.height < MIN_FACE_SIZE_PIXELS ||
                     box.width > MAX_FACE_SIZE_PIXELS || box.height > MAX_FACE_SIZE_PIXELS
                 ) {
-                    continue; // Skip if face is too small or too large
+                    continue; 
                 }
 
                 const aspectRatio = box.width / box.height;
                 if (aspectRatio < MIN_ASPECT_RATIO || aspectRatio > MAX_ASPECT_RATIO) {
-                    continue; // Skip if aspect ratio is not face-like
+                    continue; 
                 }
                 // --- End of Filter ---
 
@@ -176,7 +204,6 @@ export function useEmotionAnalyzer() {
                 if (cropCtx) {
                     cropCanvas.width = box.width;
                     cropCanvas.height = box.height;
-                    // Crop from the original video element
                     cropCtx.drawImage(videoElement, box.x, box.y, box.width, box.height, 0, 0, box.width, box.height);
                     imageDataUrl = cropCanvas.toDataURL();
                 }
