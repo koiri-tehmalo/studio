@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Loader2, TestTube, Upload, Camera } from 'lucide-react';
+import { Loader2, TestTube, Upload, Camera, Users, Smile, Meh } from 'lucide-react';
 import { useCamera } from '@/providers/camera-provider';
 import { useEmotionAnalyzer, AnalysisResult } from '@/hooks/use-emotion-analyzer';
 import { useAuth } from '@/providers/auth-provider';
@@ -113,6 +113,7 @@ export default function TestDetectionPage() {
     }
 
     const currentAnalysisResults = await analyzeFrame(video);
+    setAnalysisResults(currentAnalysisResults); // Set results for stats cards
     const ctx = canvas.getContext('2d');
 
     if (ctx && currentAnalysisResults) {
@@ -161,14 +162,11 @@ export default function TestDetectionPage() {
 
       setIsAnalyzingImage(true);
       
-      // The hook doesn't have an image analyzer, so we have to be creative.
-      // We'll create a temporary video element from the image.
       const video = document.createElement('video');
       video.src = image.src;
       video.width = image.naturalWidth;
       video.height = image.naturalHeight;
       
-      // We need to wait for the video to be ready to play
       video.onloadeddata = async () => {
         const results = await analyzeFrame(video);
         setAnalysisResults(results);
@@ -186,7 +184,6 @@ export default function TestDetectionPage() {
   
   useEffect(() => {
     if (uploadedImage && imageRef.current && modelsLoaded) {
-      // Use a timeout to ensure the image has rendered and clientWidth/clientHeight are available
       setTimeout(analyzeUploadedImage, 100);
     }
   }, [uploadedImage, modelsLoaded, analyzeUploadedImage]);
@@ -210,6 +207,10 @@ export default function TestDetectionPage() {
   if (isCameraLoading) loadingText = "กำลังเปิดกล้อง...";
   else if (!modelsLoaded) loadingText = "กำลังโหลดโมเดลวิเคราะห์...";
   else if (isAnalyzingImage) loadingText = "กำลังวิเคราะห์รูปภาพ...";
+
+  const totalFaces = analysisResults.length;
+  const interestedFaces = analysisResults.filter(r => r.isInterested).length;
+  const uninterestedFaces = totalFaces - interestedFaces;
 
   return (
     <div className="flex flex-col gap-6">
@@ -287,7 +288,42 @@ export default function TestDetectionPage() {
                 </div>
               </TabsContent>
             </Tabs>
-             <div className="flex items-center justify-end w-full max-w-4xl text-sm text-muted-foreground">
+            
+            <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">ใบหน้าที่ตรวจพบ</CardTitle>
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{totalFaces}</div>
+                    <p className="text-xs text-muted-foreground">จำนวนใบหน้าทั้งหมดในเฟรม</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">สนใจ</CardTitle>
+                    <Smile className="h-4 w-4 text-green-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{interestedFaces}</div>
+                    <p className="text-xs text-muted-foreground">จำนวนคนที่แสดงความสนใจ</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">ไม่สนใจ</CardTitle>
+                    <Meh className="h-4 w-4 text-red-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{uninterestedFaces}</div>
+                    <p className="text-xs text-muted-foreground">จำนวนคนที่ไม่แสดงความสนใจ</p>
+                  </CardContent>
+                </Card>
+            </div>
+
+
+             <div className="flex items-center justify-end w-full max-w-4xl text-sm text-muted-foreground mt-2">
               <span className={`h-2.5 w-2.5 rounded-full mr-2 ${modelsLoaded ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
               MediaPipe & CNN Status
             </div>
@@ -296,5 +332,3 @@ export default function TestDetectionPage() {
     </div>
   );
 }
-
-    
