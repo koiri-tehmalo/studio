@@ -47,7 +47,8 @@ export function useEmotionAnalyzer() {
                 );
                 faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.task`,
+                        modelAssetPath: 
+                        "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
                     runningMode: "VIDEO",
@@ -99,7 +100,21 @@ export function useEmotionAnalyzer() {
 
                 // Directly use the boundingBox from the detector
                 const { originX, originY, width, height } = detection.boundingBox;
-                const box: BoundingBox = { x: originX, y: originY, width, height };
+                
+                let box: BoundingBox = { 
+                    x: Math.max(0, originX), 
+                    y: Math.max(0, originY), 
+                    width, 
+                    height 
+                };
+
+                // Clamp width and height to be within video boundaries
+                if (box.x + box.width > video.videoWidth) {
+                    box.width = video.videoWidth - box.x;
+                }
+                if (box.y + box.height > video.videoHeight) {
+                    box.height = video.videoHeight - box.y;
+                }
                 
                 if (box.width <= 0 || box.height <= 0) continue;
 
