@@ -54,7 +54,7 @@ export function useEmotionAnalyzer() {
                         delegate: "GPU",
                     },
                     runningMode: 'VIDEO',
-                    minDetectionConfidence: 0.5, // Lowered to detect smaller faces
+                    minDetectionConfidence: 0.5,
                 });
 
                 await tf.setBackend('webgl');
@@ -133,6 +133,25 @@ export function useEmotionAnalyzer() {
                 }
                 
                 if (box.width <= 0 || box.height <= 0) continue;
+
+                // --- Post-processing Filter ---
+                const MIN_FACE_SIZE_PIXELS = 20;
+                const MAX_FACE_SIZE_PIXELS = sourceHeight; // Max face size can be the height of the video
+                const MIN_ASPECT_RATIO = 0.7;
+                const MAX_ASPECT_RATIO = 1.3;
+
+                if (
+                    box.width < MIN_FACE_SIZE_PIXELS || box.height < MIN_FACE_SIZE_PIXELS ||
+                    box.width > MAX_FACE_SIZE_PIXELS || box.height > MAX_FACE_SIZE_PIXELS
+                ) {
+                    continue; // Skip if face is too small or too large
+                }
+
+                const aspectRatio = box.width / box.height;
+                if (aspectRatio < MIN_ASPECT_RATIO || aspectRatio > MAX_ASPECT_RATIO) {
+                    continue; // Skip if aspect ratio is not face-like
+                }
+                // --- End of Filter ---
 
                 const isInterested = await tf.tidy(() => {
                     // Crop from the original video element for prediction
