@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
+import { FaceDetector, FilesetResolver, RunningMode } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useToast } from './use-toast';
 
@@ -32,7 +32,8 @@ export interface FaceData {
 export function useEmotionAnalyzer() {
     const { toast } = useToast();
     const [modelsLoaded, setModelsLoaded] = useState(false);
-    const faceDetectorRef = useRef<FaceDetector | null>(null);
+    const faceDetectorForVideoRef = useRef<FaceDetector | null>(null);
+    const faceDetectorForImageRef = useRef<FaceDetector | null>(null);
     const cnnModelRef = useRef<tf.LayersModel | null>(null);
     const tempCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -45,12 +46,24 @@ export function useEmotionAnalyzer() {
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.12/wasm"
                 );
-                faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
+
+                // Create a detector for VIDEO mode
+                faceDetectorForVideoRef.current = await FaceDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: 
-                        "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
+                    runningMode: RunningMode.VIDEO,
+                    minDetectionConfidence: 0.6,
+                });
+
+                // Create a detector for IMAGE mode
+                faceDetectorForImageRef.current = await FaceDetector.createFromOptions(vision, {
+                     baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+                        delegate: "GPU",
+                    },
+                    runningMode: RunningMode.IMAGE,
                     minDetectionConfidence: 0.6,
                 });
 
@@ -71,8 +84,11 @@ export function useEmotionAnalyzer() {
 
         // Cleanup function
         return () => {
-            if (faceDetectorRef.current) {
-                faceDetectorRef.current.close();
+            if (faceDetectorForVideoRef.current) {
+                faceDetectorForVideoRef.current.close();
+            }
+             if (faceDetectorForImageRef.current) {
+                faceDetectorForImageRef.current.close();
             }
             if (cnnModelRef.current) {
                 cnnModelRef.current.dispose();
@@ -82,21 +98,20 @@ export function useEmotionAnalyzer() {
 
     // Main analysis function
     const analyzeFrame = useCallback(async (sourceElement: HTMLVideoElement | HTMLImageElement): Promise<AnalysisResult[]> => {
-        const faceDetector = faceDetectorRef.current;
+        const isVideo = sourceElement instanceof HTMLVideoElement;
+        const faceDetector = isVideo ? faceDetectorForVideoRef.current : faceDetectorForImageRef.current;
         const cnnModel = cnnModelRef.current;
         const tempCanvas = tempCanvasRef.current;
 
         if (!faceDetector || !cnnModel || !tempCanvas) {
             return [];
         }
-        
-        const isVideo = sourceElement instanceof HTMLVideoElement;
 
         // Use detectForVideo for video and detect for image
-        const results = isVideo 
+        const results = isVideo
             ? faceDetector.detectForVideo(sourceElement, performance.now())
             : faceDetector.detect(sourceElement);
-            
+
         const analysisResults: AnalysisResult[] = [];
         const sourceWidth = isVideo ? sourceElement.videoWidth : sourceElement.naturalWidth;
         const sourceHeight = isVideo ? sourceElement.videoHeight : sourceElement.naturalHeight;
@@ -105,7 +120,6 @@ export function useEmotionAnalyzer() {
              for (const detection of results.detections) {
                 if (!detection.boundingBox) continue;
 
-                // Directly use the boundingBox from the detector
                 const { originX, originY, width, height } = detection.boundingBox;
                 
                 let box: BoundingBox = { 
@@ -115,7 +129,6 @@ export function useEmotionAnalyzer() {
                     height 
                 };
 
-                // Clamp width and height to be within video boundaries
                 if (box.x + box.width > sourceWidth) {
                     box.width = sourceWidth - box.x;
                 }
