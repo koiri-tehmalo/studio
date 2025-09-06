@@ -1,7 +1,8 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { FaceDetector, FilesetResolver, RunningMode } from "@mediapipe/tasks-vision";
+import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import * as tf from '@tensorflow/tfjs';
 import { useToast } from './use-toast';
 
@@ -53,7 +54,7 @@ export function useEmotionAnalyzer() {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
-                    runningMode: RunningMode.VIDEO,
+                    runningMode: 'VIDEO',
                     minDetectionConfidence: 0.6,
                 });
 
@@ -63,7 +64,7 @@ export function useEmotionAnalyzer() {
                         modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
                         delegate: "GPU",
                     },
-                    runningMode: RunningMode.IMAGE,
+                    runningMode: 'IMAGE',
                     minDetectionConfidence: 0.6,
                 });
 
