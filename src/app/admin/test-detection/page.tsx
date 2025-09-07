@@ -19,8 +19,8 @@ export default function TestDetectionPage() {
   
   const liveCroppedFaces = useRef<FaceData[]>([]);
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
-
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult[]>([]);
+  const [backendStatus, setBackendStatus] = useState<'idle' | 'connected' | 'error'>('idle');
 
   const { stream, hasCameraPermission, isLoading: isCameraLoading, startStream, stopStream } = useCamera();
   const { modelsLoaded, analyzeFrame } = useEmotionAnalyzer();
@@ -97,9 +97,14 @@ export default function TestDetectionPage() {
       return;
     }
 
-    const currentAnalysisResults = await analyzeFrame(video);
-    setAnalysisResults(currentAnalysisResults); // Set results for stats cards
-    liveCroppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl, interested: r.isInterested }));
+    const { results: currentAnalysisResults, success } = await analyzeFrame(video);
+    setBackendStatus(success ? 'connected' : 'error');
+    
+    if (success) {
+        setAnalysisResults(currentAnalysisResults); // Set results for stats cards
+        liveCroppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+    }
+
 
     const ctx = canvas.getContext('2d');
 
@@ -161,6 +166,15 @@ export default function TestDetectionPage() {
   const totalFaces = analysisResults.length;
   const interestedFaces = analysisResults.filter(r => r.isInterested).length;
   const uninterestedFaces = totalFaces - interestedFaces;
+  
+  const getStatusColor = () => {
+    switch (backendStatus) {
+        case 'connected': return 'bg-green-500 animate-pulse';
+        case 'error': return 'bg-red-500';
+        default: return 'bg-yellow-500';
+    }
+  };
+
 
   return (
     <div className="flex flex-col gap-6">
@@ -257,8 +271,8 @@ export default function TestDetectionPage() {
 
 
              <div className="flex items-center justify-end w-full max-w-4xl text-sm text-muted-foreground mt-2">
-              <span className={`h-2.5 w-2.5 rounded-full mr-2 ${modelsLoaded ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-              MediaPipe & CNN Status
+              <span className={`h-2.5 w-2.5 rounded-full mr-2 ${getStatusColor()}`}></span>
+              Backend Connection
             </div>
         </CardContent>
       </Card>

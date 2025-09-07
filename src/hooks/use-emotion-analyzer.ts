@@ -27,6 +27,11 @@ export interface FaceData {
     interested: boolean;
 }
 
+interface AnalyzeFrameResponse {
+    results: AnalysisResult[];
+    success: boolean;
+}
+
 // =================================================================
 // Custom Hook
 // =================================================================
@@ -43,11 +48,11 @@ export function useEmotionAnalyzer() {
 
 
     // Main analysis function
-    const analyzeFrame = useCallback(async (videoElement: HTMLVideoElement): Promise<AnalysisResult[]> => {
+    const analyzeFrame = useCallback(async (videoElement: HTMLVideoElement): Promise<AnalyzeFrameResponse> => {
         const tempCanvas = tempCanvasRef.current;
         if (!tempCanvas) {
             console.error("Temp canvas not available");
-            return [];
+            return { results: [], success: false };
         }
         
         // 1. Capture frame from video element
@@ -56,7 +61,7 @@ export function useEmotionAnalyzer() {
         const tempCtx = tempCanvas.getContext('2d');
         if (!tempCtx) {
              console.error("Could not get 2D context from temp canvas");
-             return [];
+             return { results: [], success: false };
         }
         tempCtx.drawImage(videoElement, 0, 0, tempCanvas.width, tempCanvas.height);
         const imageDataUrl = tempCanvas.toDataURL('image/jpeg');
@@ -84,7 +89,7 @@ export function useEmotionAnalyzer() {
                     });
                     errorToastDisplayed.current = true; // Set flag to true after showing toast
                 }
-                return [];
+                return { results: [], success: false };
             }
             
             errorToastDisplayed.current = false; // Reset on successful call
@@ -94,10 +99,13 @@ export function useEmotionAnalyzer() {
 
             // The backend must return the cropped image data URL if we want to display it
             // For now, we'll generate a placeholder if it's missing.
-            return results.map(r => ({
-                ...r,
-                imageDataUrl: r.imageDataUrl || 'https://placehold.co/48x48' 
-            }));
+             return {
+                results: results.map(r => ({
+                    ...r,
+                    imageDataUrl: r.imageDataUrl || 'https://placehold.co/48x48' 
+                })),
+                success: true
+            };
 
         } catch (error) {
             console.error("Failed to send frame for analysis:", error);
@@ -109,7 +117,7 @@ export function useEmotionAnalyzer() {
                 });
                 errorToastDisplayed.current = true;
             }
-            return [];
+            return { results: [], success: false };
         }
 
     }, [toast]);

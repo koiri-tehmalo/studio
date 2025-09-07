@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -38,6 +39,7 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
 
   const [realtimeStudentCount, setRealtimeStudentCount] = useState(0);
   const [interestedCount, setInterestedCount] = useState(0);
+  const [backendStatus, setBackendStatus] = useState<'idle' | 'connected' | 'error'>('idle');
   
   const minuteFrameCountRef = useRef(0);
   const minuteTotalStudentCountRef = useRef(0);
@@ -69,7 +71,8 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
       return;
     }
     
-    const analysisResults = await analyzeFrame(video);
+    const { results: analysisResults, success } = await analyzeFrame(video);
+    setBackendStatus(success ? 'connected' : 'error');
     
     const ctx = canvas.getContext('2d');
     if (ctx && analysisResults) {
@@ -104,7 +107,7 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
         ctx.fillStyle = '#fff';
         ctx.fillText(thaiText, canvasX + 5, canvasY - 6);
       }
-      liveCroppedFaces.current = analysisResults.map(r => ({ image: r.imageDataUrl, interested: r.isInterested }));
+      liveCroppedFaces.current = analysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
       setRealtimeStudentCount(analysisResults.length);
       setInterestedCount(currentInterested);
       
@@ -242,6 +245,14 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   const showLoadingOverlay = isCameraLoading || !modelsLoaded;
   const loadingText = isCameraLoading ? "กำลังเปิดกล้อง..." : !modelsLoaded ? "กำลังโหลดโมเดลวิเคราะห์ใบหน้า..." : "";
 
+  const getStatusColor = () => {
+    switch (backendStatus) {
+        case 'connected': return 'bg-green-500 animate-pulse';
+        case 'error': return 'bg-red-500';
+        default: return 'bg-yellow-500';
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -315,8 +326,8 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
                 )}
               </div>
                <div className="flex items-center justify-end w-full text-sm text-muted-foreground">
-                <span className={`h-2.5 w-2.5 rounded-full mr-2 ${modelsLoaded ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></span>
-                MediaPipe & CNN
+                <span className={`h-2.5 w-2.5 rounded-full mr-2 ${getStatusColor()}`}></span>
+                Backend Connection
               </div>
                {hasCameraPermission === false && (
                 <Alert variant="destructive" className="w-full">
