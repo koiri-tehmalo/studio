@@ -173,7 +173,7 @@ export default function HistoryPage() {
                     <TableCell>
                       {session.createdAt ? format(session.createdAt, 'PPpp') : 'N/A'}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell /*className="text-right"*/>
                         <Button
                           variant="outline"
                           size="sm"
