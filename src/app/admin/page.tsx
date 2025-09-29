@@ -85,10 +85,20 @@ export default function AdminPage() {
 
         const timelineList = timelineSnapshot.docs.map(doc => doc.data() as TimelineData);
 
-        const sessionInfoRows = [
-            `ผู้สังเกตการณ์:,${session.observerName}`,
-            `วิชา:,${session.subject}`,
-            `วันที่:,${session.date}`,
+        // --- Summary Calculations ---
+        const totalMinutes = timelineList.length;
+        const maxPersonCount = Math.max(...timelineList.map(d => d.personCount), 0);
+        const totalInterested = timelineList.reduce((sum, d) => sum + d.interestedCount, 0);
+        const totalPeopleOverall = timelineList.reduce((sum, d) => sum + d.personCount, 0);
+        const interestedPercentage = totalPeopleOverall > 0 ? ((totalInterested / totalPeopleOverall) * 100).toFixed(2) : '0.00';
+        const uninterestedPercentage = totalPeopleOverall > 0 ? (100 - parseFloat(interestedPercentage)).toFixed(2) : '0.00';
+
+        const summaryRows = [
+            `ผู้สังเกตการณ์:,${session.observerName},,,,สรุปข้อมูล`,
+            `วิชา:,${session.subject},,,,เวลา (นาที),${totalMinutes}`,
+            `วันที่:,${session.date},,,,จำนวนคน,${maxPersonCount}`,
+            ",,,,สนใจ," + `${interestedPercentage}%`,
+            ",,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
             ""
         ];
 
@@ -106,7 +116,7 @@ export default function AdminPage() {
             dataRows.push(row);
         });
 
-        const csvContent = "\uFEFF" + [...sessionInfoRows, ...dataRows].join("\n");
+        const csvContent = "\uFEFF" + [...summaryRows, ...dataRows].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);

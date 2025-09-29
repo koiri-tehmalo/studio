@@ -206,27 +206,38 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
   }, [toast, sessionInfo.id]);
 
   const handleExport = () => {
-    const loginInfoRows = [
-      `ชื่อผู้สังเกตการณ์:,${sessionInfo.name}`,
-      `วิชา:,${sessionInfo.subject}`,
-      `วันที่:,${sessionInfo.date}`,
-      ""
+    // --- Summary Calculations ---
+    const dataToExport = [...perMinuteData].reverse(); // Use reversed data for correct order
+    const totalMinutes = dataToExport.length;
+    const maxPersonCount = Math.max(...dataToExport.map(d => d.personCount), 0);
+    const totalInterested = dataToExport.reduce((sum, d) => sum + d.interestedCount, 0);
+    const totalPeopleOverall = dataToExport.reduce((sum, d) => sum + d.personCount, 0);
+    const interestedPercentage = totalPeopleOverall > 0 ? ((totalInterested / totalPeopleOverall) * 100).toFixed(2) : '0.00';
+    const uninterestedPercentage = totalPeopleOverall > 0 ? (100 - parseFloat(interestedPercentage)).toFixed(2) : '0.00';
+
+    const summaryRows = [
+        `ผู้สังเกตการณ์:,${sessionInfo.name},,,,สรุปข้อมูล`,
+        `วิชา:,${sessionInfo.subject},,,,เวลา (นาที),${totalMinutes}`,
+        `วันที่:,${sessionInfo.date},,,,จำนวนคน,${maxPersonCount}`,
+        ",,,,สนใจ," + `${interestedPercentage}%`,
+        ",,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
+        ""
     ];
     
-    const headers = ["เวลา", "จำนวนคน (เฉลี่ย)", "สนใจ", "ไม่สนใจ"];
+    const headers = ["เวลา", "จำนวนคน", "สนใจ", "ไม่สนใจ"];
     let dataRows = [headers.join(",")];
 
-    perMinuteData.forEach(entry => {
+    dataToExport.forEach(entry => {
         const row = [
-            entry.timestamp,
+            entry.timestamp.replace(' น.', ''), // Clean timestamp for CSV
             entry.personCount,
-            `"${entry.interested}"`,
-            `"${entry.uninterested}"`
+            entry.interestedCount,
+            entry.uninterestedCount,
         ].join(",");
         dataRows.push(row);
     });
 
-    const csvContent = "\uFEFF" + [...loginInfoRows, ...dataRows].join("\n");
+    const csvContent = "\uFEFF" + [...summaryRows, ...dataRows].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -417,8 +428,8 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
                         <TableRow key={`minute-${index}`}>
                           <TableCell className="font-medium pl-6">{entry.timestamp}</TableCell>
                           <TableCell className="text-center">{entry.personCount}</TableCell>
-                          <TableCell className="text-center">{entry.interested}</TableCell>
-                          <TableCell className="text-center pr-6">{entry.uninterested}</TableCell>
+                          <TableCell className="text-center">{entry.interestedCount}</TableCell>
+                          <TableCell className="text-center pr-6">{entry.uninterestedCount}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
