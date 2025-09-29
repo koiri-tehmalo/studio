@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 // This is the URL of your Python backend server.
 // Make sure it's running and accessible from the Next.js server environment.
-const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://127.0.0.1:8000/analyze';
+const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'https://res-full.onrender.com/analyze';
 
 export async function POST(request: Request) {
   try {
