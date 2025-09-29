@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,7 +13,6 @@ import { auth, db } from '@/lib/firebase';
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import Link from 'next/link';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function RegisterPage() {
@@ -21,7 +21,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState('user');
   const [isLoading, setIsLoading] = useState(false);
   const { user, isLoading: isAuthLoading } = useAuth();
 
@@ -40,7 +39,7 @@ export default function RegisterPage() {
   }
 
   const handleRegister = async () => {
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password) {
       toast({
         variant: 'destructive',
         title: 'ข้อมูลไม่ครบถ้วน',
@@ -55,11 +54,11 @@ export default function RegisterPage() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Add user data to Firestore
+      // Add user data to Firestore with a default role of 'user'
       await setDoc(doc(db, "users", user.uid), {
         name: name,
         email: email,
-        role: role,
+        role: 'user', // Set role to 'user' by default
       });
 
       toast({
@@ -133,18 +132,6 @@ export default function RegisterPage() {
               onChange={(e) => setPassword(e.target.value)}
               disabled={isLoading}
             />
-          </div>
-           <div className="space-y-2">
-            <Label htmlFor="role">ระดับผู้ใช้งาน</Label>
-            <Select onValueChange={setRole} defaultValue={role} disabled={isLoading}>
-                <SelectTrigger id="role">
-                    <SelectValue placeholder="เลือกระดับผู้ใช้งาน" />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="user">ผู้ใช้ (User)</SelectItem>
-                    <SelectItem value="admin">ผู้ดูแลระบบ (Admin)</SelectItem>
-                </SelectContent>
-            </Select>
           </div>
           <Button
             type="button"
