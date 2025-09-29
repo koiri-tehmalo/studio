@@ -219,8 +219,8 @@ export default function SessionDashboard({ sessionInfo, onSessionEnd }: { sessio
         `ผู้สังเกตการณ์:,${sessionInfo.name},,,,สรุปข้อมูล`,
         `วิชา:,${sessionInfo.subject},,,,เวลา (นาที),${totalMinutes}`,
         `วันที่:,${sessionInfo.date},,,,จำนวนคน,${maxPersonCount}`,
-        ",,,,สนใจ," + `${interestedPercentage}%`,
-        ",,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
+        ",,,,,สนใจ," + `${interestedPercentage}%`,
+        ",,,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
         ""
     ];
     

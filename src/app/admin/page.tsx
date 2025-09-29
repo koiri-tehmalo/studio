@@ -97,8 +97,8 @@ export default function AdminPage() {
             `ผู้สังเกตการณ์:,${session.observerName},,,,สรุปข้อมูล`,
             `วิชา:,${session.subject},,,,เวลา (นาที),${totalMinutes}`,
             `วันที่:,${session.date},,,,จำนวนคน,${maxPersonCount}`,
-            ",,,,สนใจ," + `${interestedPercentage}%`,
-            ",,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
+            ",,,,,สนใจ," + `${interestedPercentage}%`,
+            ",,,,,ไม่สนใจ," + `${uninterestedPercentage}%`,
             ""
         ];
 
