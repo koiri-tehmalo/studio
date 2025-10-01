@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, TestTube, Users, Smile, Meh, Upload } from 'lucide-react';
+import { Loader2, TestTube, Users, Smile, Meh, Upload, Video } from 'lucide-react';
 import { useCamera } from '@/providers/camera-provider';
 import { useEmotionAnalyzer, AnalysisResult, FaceData } from '@/hooks/use-emotion-analyzer';
 import { useAuth } from '@/providers/auth-provider';
@@ -21,10 +21,14 @@ export default function TestDetectionPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const imageCanvasRef = useRef<HTMLCanvasElement>(null);
+  const uploadedVideoRef = useRef<HTMLVideoElement>(null);
+  const uploadedVideoCanvasRef = useRef<HTMLCanvasElement>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoFileInputRef = useRef<HTMLInputElement>(null);
   const animationFrameId = useRef<number>();
   
-  const liveCroppedFaces = useRef<FaceData[]>([]);
+  const croppedFaces = useRef<FaceData[]>([]);
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
 
   // States for live analysis
@@ -34,6 +38,10 @@ export default function TestDetectionPage() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageAnalysisResults, setImageAnalysisResults] = useState<AnalysisResult[]>([]);
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+
+  // States for video analysis
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [videoAnalysisResults, setVideoAnalysisResults] = useState<AnalysisResult[]>([]);
 
   const [activeTab, setActiveTab] = useState('camera');
   const [backendStatus, setBackendStatus] = useState<'idle' | 'connected' | 'error'>('idle');
@@ -49,23 +57,33 @@ export default function TestDetectionPage() {
     }
   }, [userRole, isAuthLoading, router]);
 
+  const stopAllMedia = useCallback(() => {
+    if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = undefined;
+    }
+    stopStream();
+    if (uploadedVideoRef.current) {
+      uploadedVideoRef.current.pause();
+    }
+  }, [stopStream]);
+
   useEffect(() => {
+    stopAllMedia();
+    setFacesForDisplay([]);
+    croppedFaces.current = [];
+
     if (activeTab === 'camera') {
       startStream();
-    } else {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-      stopStream();
+    } else if (activeTab === 'uploadVideo' && uploadedVideoRef.current && !uploadedVideoRef.current.paused) {
+        animationFrameId.current = requestAnimationFrame(predictWebcam);
     }
-    // Cleanup on component unmount
+    
     return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
-      stopStream();
+      stopAllMedia();
     };
-  }, [activeTab, startStream, stopStream]);
+  }, [activeTab, startStream, stopAllMedia]);
+
 
   useEffect(() => {
     if (stream && videoRef.current && activeTab === 'camera') {
@@ -113,16 +131,27 @@ export default function TestDetectionPage() {
   }, []);
 
   const predictWebcam = useCallback(async () => {
-    if (activeTab !== 'camera') return;
-    const video = videoRef.current;
-    if (!video || video.readyState < 2 || !modelsLoaded) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
-      return;
+    let video: HTMLVideoElement | null = null;
+    let canvas: HTMLCanvasElement | null = null;
+    let setAnalysisResults: React.Dispatch<React.SetStateAction<AnalysisResult[]>> | null = null;
+
+    if (activeTab === 'camera') {
+        video = videoRef.current;
+        canvas = canvasRef.current;
+        setAnalysisResults = setLiveAnalysisResults;
+    } else if (activeTab === 'uploadVideo') {
+        video = uploadedVideoRef.current;
+        canvas = uploadedVideoCanvasRef.current;
+        setAnalysisResults = setVideoAnalysisResults;
     }
 
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
+    if (!video || video.readyState < 2 || !modelsLoaded || video.paused) {
+      if (video && !video.paused) animationFrameId.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    
+    if (!canvas || !setAnalysisResults) {
+      if (video && !video.paused) animationFrameId.current = requestAnimationFrame(predictWebcam);
       return;
     }
 
@@ -130,8 +159,8 @@ export default function TestDetectionPage() {
     setBackendStatus(success ? 'connected' : 'error');
     
     if (success) {
-        setLiveAnalysisResults(currentAnalysisResults); // Set results for stats cards
-        liveCroppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+        setAnalysisResults(currentAnalysisResults); // Set results for stats cards
+        croppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
     }
 
     const ctx = canvas.getContext('2d');
@@ -146,30 +175,24 @@ export default function TestDetectionPage() {
   
   useEffect(() => {
     const faceUpdateInterval = setInterval(() => {
-        if (activeTab === 'camera') {
-            setFacesForDisplay([...liveCroppedFaces.current]);
-        }
+      setFacesForDisplay([...croppedFaces.current]);
     }, 5000);
 
     return () => clearInterval(faceUpdateInterval);
-  }, [activeTab]);
+  }, []);
 
 
   const handleVideoPlay = useCallback(() => {
     if (modelsLoaded) {
-      animationFrameId.current = requestAnimationFrame(predictWebcam);
+        if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
+        animationFrameId.current = requestAnimationFrame(predictWebcam);
     }
   }, [modelsLoaded, predictWebcam]);
   
   useEffect(() => {
-    const video = videoRef.current;
-    if (modelsLoaded && video && !video.paused && activeTab === 'camera') {
+    const liveVideo = videoRef.current;
+    if (modelsLoaded && liveVideo && !liveVideo.paused && activeTab === 'camera') {
         handleVideoPlay();
-    }
-    return () => {
-        if (animationFrameId.current) {
-            cancelAnimationFrame(animationFrameId.current);
-        }
     }
   }, [modelsLoaded, handleVideoPlay, activeTab]);
 
@@ -186,11 +209,21 @@ export default function TestDetectionPage() {
         setBackendStatus(success ? 'connected' : 'error');
         if (success) {
           setImageAnalysisResults(results);
-          setFacesForDisplay(results.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested })));
+          croppedFaces.current = results.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+          setFacesForDisplay([...croppedFaces.current]);
         }
         setIsAnalyzingImage(false);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleVideoFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+        const url = URL.createObjectURL(file);
+        setVideoSrc(url);
+        setVideoAnalysisResults([]);
     }
   };
 
@@ -218,13 +251,17 @@ export default function TestDetectionPage() {
      return null;
    }
 
-  const showCameraLoadingOverlay = isCameraLoading || !modelsLoaded;
+  const showCameraLoadingOverlay = activeTab === 'camera' && (isCameraLoading || !modelsLoaded);
   
   let loadingText = "";
   if (isCameraLoading) loadingText = "กำลังเปิดกล้อง...";
   else if (!modelsLoaded) loadingText = "กำลังโหลดโมเดลวิเคราะห์...";
 
-  const analysisResults = activeTab === 'camera' ? liveAnalysisResults : imageAnalysisResults;
+  let analysisResults: AnalysisResult[] = [];
+  if (activeTab === 'camera') analysisResults = liveAnalysisResults;
+  else if (activeTab === 'uploadImage') analysisResults = imageAnalysisResults;
+  else if (activeTab === 'uploadVideo') analysisResults = videoAnalysisResults;
+
   const totalFaces = analysisResults.length;
   const interestedFaces = analysisResults.filter(r => r.isInterested).length;
   const uninterestedFaces = totalFaces - interestedFaces;
@@ -236,6 +273,15 @@ export default function TestDetectionPage() {
         default: return 'bg-yellow-500';
     }
   };
+  
+  const getFaceDisplayMessage = () => {
+      switch (activeTab) {
+          case 'camera': return 'รอการตรวจจับใบหน้า...';
+          case 'uploadImage': return imageSrc ? 'ผลลัพธ์การวิเคราะห์รูปภาพ' : 'อัปโหลดรูปภาพเพื่อดูผลลัพธ์...';
+          case 'uploadVideo': return videoSrc ? 'รอการตรวจจับใบหน้าจากวิดีโอ...' : 'อัปโหลดวิดีโอเพื่อดูผลลัพธ์...';
+          default: return '';
+      }
+  }
 
 
   return (
@@ -255,7 +301,7 @@ export default function TestDetectionPage() {
         <CardHeader>
           <CardTitle>เครื่องมือทดสอบโมเดล</CardTitle>
           <CardDescription>
-            ทดสอบการตรวจจับใบหน้าและอารมณ์จากกล้องหรืออัปโหลดรูปภาพ ผลลัพธ์จะไม่ถูกบันทึก
+            ทดสอบการตรวจจับใบหน้าและอารมณ์จากกล้อง, รูปภาพ หรือวิดีโอ ผลลัพธ์จะไม่ถูกบันทึก
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-4">
@@ -274,14 +320,15 @@ export default function TestDetectionPage() {
                   ))
                 ) : (
                   <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-                    {activeTab === 'camera' ? 'รอการตรวจจับใบหน้า...' : 'อัปโหลดรูปภาพเพื่อดูผลลัพธ์...'}
+                    {getFaceDisplayMessage()}
                   </div>
                 )}
               </div>
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="camera">กล้องสด</TabsTrigger>
-                  <TabsTrigger value="upload">อัปโหลดรูปภาพ</TabsTrigger>
+                  <TabsTrigger value="uploadImage">อัปโหลดรูปภาพ</TabsTrigger>
+                  <TabsTrigger value="uploadVideo">อัปโหลดวิดีโอ</TabsTrigger>
                 </TabsList>
                 <TabsContent value="camera">
                   <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center mt-4">
@@ -295,7 +342,7 @@ export default function TestDetectionPage() {
                     )}
                   </div>
                 </TabsContent>
-                <TabsContent value="upload">
+                <TabsContent value="uploadImage">
                     <Card className="mt-4">
                         <CardContent className="pt-6">
                             <div className="grid w-full items-center gap-2">
@@ -316,6 +363,34 @@ export default function TestDetectionPage() {
                                         <Loader2 className="h-8 w-8 animate-spin mb-2" />
                                         <p>กำลังวิเคราะห์รูปภาพ...</p>
                                     </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                 <TabsContent value="uploadVideo">
+                    <Card className="mt-4">
+                        <CardContent className="pt-6">
+                            <div className="grid w-full items-center gap-2">
+                                <Label htmlFor="video-upload">เลือกวิดีโอ</Label>
+                                <Input id="video-upload" type="file" ref={videoFileInputRef} onChange={handleVideoFileChange} accept="video/*" />
+                            </div>
+                            <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-muted flex justify-center items-center mt-4">
+                                {videoSrc ? (
+                                    <>
+                                        <video
+                                            ref={uploadedVideoRef}
+                                            src={videoSrc}
+                                            onPlay={handleVideoPlay}
+                                            onEnded={() => { if(animationFrameId.current) cancelAnimationFrame(animationFrameId.current) }}
+                                            className="w-full h-full object-contain"
+                                            controls
+                                            muted
+                                        />
+                                        <canvas ref={uploadedVideoCanvasRef} className="absolute top-0 left-0 pointer-events-none" />
+                                    </>
+                                ) : (
+                                    <p className="text-muted-foreground">โปรดเลือกวิดีโอ</p>
                                 )}
                             </div>
                         </CardContent>
