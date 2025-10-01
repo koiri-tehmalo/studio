@@ -160,7 +160,9 @@ export default function TestDetectionPage() {
     
     if (success) {
         setAnalysisResults(currentAnalysisResults); // Set results for stats cards
-        croppedFaces.current = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+        // Accumulate faces instead of replacing
+        const newFaces = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+        croppedFaces.current.push(...newFaces);
     }
 
     const ctx = canvas.getContext('2d');
@@ -175,11 +177,17 @@ export default function TestDetectionPage() {
   
   useEffect(() => {
     const faceUpdateInterval = setInterval(() => {
-      setFacesForDisplay([...croppedFaces.current]);
-    }, 5000);
+      // Only update if we're in a video mode
+      if (activeTab === 'camera' || activeTab === 'uploadVideo') {
+          if (croppedFaces.current.length > 0) {
+              setFacesForDisplay([...croppedFaces.current]);
+              croppedFaces.current = []; // Reset for the next second
+          }
+      }
+    }, 1000); // Update every 1 second
 
     return () => clearInterval(faceUpdateInterval);
-  }, []);
+  }, [activeTab]);
 
 
   const handleVideoPlay = useCallback(() => {
@@ -209,8 +217,9 @@ export default function TestDetectionPage() {
         setBackendStatus(success ? 'connected' : 'error');
         if (success) {
           setImageAnalysisResults(results);
-          croppedFaces.current = results.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
-          setFacesForDisplay([...croppedFaces.current]);
+          // For images, we just set the results directly, not accumulate.
+          const imageFaces = results.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
+          setFacesForDisplay(imageFaces);
         }
         setIsAnalyzingImage(false);
       };
@@ -450,5 +459,3 @@ export default function TestDetectionPage() {
     </div>
   );
 }
-
-    
