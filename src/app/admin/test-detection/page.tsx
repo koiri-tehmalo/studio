@@ -29,6 +29,7 @@ export default function TestDetectionPage() {
   const animationFrameId = useRef<number>();
   
   const croppedFaces = useRef<FaceData[]>([]);
+  const seenFaces = useRef<Set<string>>(new Set());
   const [facesForDisplay, setFacesForDisplay] = useState<FaceData[]>([]);
 
   // States for live analysis
@@ -72,6 +73,7 @@ export default function TestDetectionPage() {
     stopAllMedia();
     setFacesForDisplay([]);
     croppedFaces.current = [];
+    seenFaces.current.clear();
 
     if (activeTab === 'camera') {
       startStream();
@@ -160,9 +162,15 @@ export default function TestDetectionPage() {
     
     if (success) {
         setAnalysisResults(currentAnalysisResults); // Set results for stats cards
-        // Accumulate faces instead of replacing
-        const newFaces = currentAnalysisResults.map(r => ({ image: r.imageDataUrl || 'https://placehold.co/48x48', interested: r.isInterested }));
-        croppedFaces.current.push(...newFaces);
+        
+        // Accumulate unique faces
+        currentAnalysisResults.forEach(r => {
+            const imageData = r.imageDataUrl || 'https://placehold.co/48x48';
+            if (!seenFaces.current.has(imageData)) {
+                seenFaces.current.add(imageData);
+                croppedFaces.current.push({ image: imageData, interested: r.isInterested });
+            }
+        });
     }
 
     const ctx = canvas.getContext('2d');
@@ -177,14 +185,18 @@ export default function TestDetectionPage() {
   
   useEffect(() => {
     const faceUpdateInterval = setInterval(() => {
-      // Only update if we're in a video mode
       if (activeTab === 'camera' || activeTab === 'uploadVideo') {
           if (croppedFaces.current.length > 0) {
-              setFacesForDisplay([...croppedFaces.current]);
-              croppedFaces.current = []; // Reset for the next second
+              setFacesForDisplay(prevFaces => {
+                  const newFaces = [...prevFaces, ...croppedFaces.current];
+                  // Optional: Limit total number of faces to prevent memory issues
+                  return newFaces.slice(-50); 
+              });
+              croppedFaces.current = [];
+              seenFaces.current.clear();
           }
       }
-    }, 1000); // Update every 1 second
+    }, 1000); 
 
     return () => clearInterval(faceUpdateInterval);
   }, [activeTab]);
@@ -213,6 +225,9 @@ export default function TestDetectionPage() {
         setImageSrc(dataUrl);
         setImageAnalysisResults([]); // Clear previous results
         setIsAnalyzingImage(true);
+        setFacesForDisplay([]); // Clear faces display for new image
+        croppedFaces.current = [];
+        seenFaces.current.clear();
         const { results, success } = await analyzeImage(dataUrl);
         setBackendStatus(success ? 'connected' : 'error');
         if (success) {
@@ -233,6 +248,9 @@ export default function TestDetectionPage() {
         const url = URL.createObjectURL(file);
         setVideoSrc(url);
         setVideoAnalysisResults([]);
+        setFacesForDisplay([]);
+        croppedFaces.current = [];
+        seenFaces.current.clear();
     }
   };
 
@@ -333,7 +351,10 @@ export default function TestDetectionPage() {
                   </div>
                 )}
               </div>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <Tabs value={activeTab} onValueChange={(newTab) => {
+                  setActiveTab(newTab);
+                  setFacesForDisplay([]); // Clear display on tab change
+              }} className="w-full">
                 <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="camera">กล้องสด</TabsTrigger>
                   <TabsTrigger value="uploadImage">อัปโหลดรูปภาพ</TabsTrigger>
